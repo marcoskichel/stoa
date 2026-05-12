@@ -23,7 +23,7 @@ fn hook_succeeds_and_creates_queue_db() {
 #[test]
 fn hook_inserts_one_pending_row() {
     let (_tmp, queue) = fresh_queue_path();
-    let _ = run_hook(&queue, "sess-001", "/tmp/raw.jsonl");
+    let _ignored = run_hook(&queue, "sess-001", "/tmp/raw.jsonl");
     let q = stoa_queue::Queue::open(&queue).unwrap();
     assert_eq!(q.pending_count().unwrap(), 1);
 }
@@ -31,9 +31,9 @@ fn hook_inserts_one_pending_row() {
 #[test]
 fn hook_is_idempotent_on_session_id() {
     let (_tmp, queue) = fresh_queue_path();
-    let _ = run_hook(&queue, "sess-A", "/tmp/raw.jsonl");
-    let _ = run_hook(&queue, "sess-A", "/tmp/raw.jsonl");
-    let _ = run_hook(&queue, "sess-A", "/tmp/raw.jsonl");
+    let _ignored = run_hook(&queue, "sess-A", "/tmp/raw.jsonl");
+    let _ignored = run_hook(&queue, "sess-A", "/tmp/raw.jsonl");
+    let _ignored = run_hook(&queue, "sess-A", "/tmp/raw.jsonl");
     let q = stoa_queue::Queue::open(&queue).unwrap();
     assert_eq!(
         q.pending_count().unwrap(),
@@ -45,7 +45,7 @@ fn hook_is_idempotent_on_session_id() {
 #[test]
 fn hook_persists_session_path_in_payload() {
     let (_tmp, queue) = fresh_queue_path();
-    let _ = run_hook(&queue, "sess-002", "/tmp/specific-session.jsonl");
+    let _ignored = run_hook(&queue, "sess-002", "/tmp/specific-session.jsonl");
     let q = stoa_queue::Queue::open(&queue).unwrap();
     let row = q.peek_first_pending().unwrap().expect("must have row");
     assert!(

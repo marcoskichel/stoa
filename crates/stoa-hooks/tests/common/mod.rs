@@ -1,10 +1,6 @@
 //! Shared helpers for `stoa-hook` binary tests.
 
 #![expect(
-    dead_code,
-    reason = "Helpers shared across test files; not all are used in every test."
-)]
-#![expect(
     unreachable_pub,
     reason = "`tests/common/` is included via `mod common;` per integration-test binary; `pub` is needed for cross-file sharing."
 )]
@@ -13,7 +9,7 @@
     reason = "Test helpers panic on setup failure — fast-fail is intended."
 )]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 
 use assert_fs::TempDir;
@@ -28,7 +24,7 @@ pub fn fresh_queue_path() -> (TempDir, PathBuf) {
 }
 
 /// Spawn `stoa-hook` with the canonical capture args.
-pub fn run_hook(queue: &PathBuf, session_id: &str, session_path: &str) -> Output {
+pub fn run_hook(queue: &Path, session_id: &str, session_path: &str) -> Output {
     Command::new(snapbox::cmd::cargo_bin!("stoa-hook"))
         .args([
             "--queue",
