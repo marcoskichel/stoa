@@ -20,4 +20,4 @@ mod worker;
 
 pub use error::{Error, Result};
 pub use redactor::Redactor;
-pub use worker::{DrainResult, WorkerConfig, drain_once};
+pub use worker::{DrainResult, WorkerConfig, drain_once, drain_once_with};

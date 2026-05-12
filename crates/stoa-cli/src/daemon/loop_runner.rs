@@ -5,7 +5,7 @@
 //! token cancels on SIGINT / SIGTERM and the task tracker waits for every
 //! worker to finish its current row before exiting.
 
-use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -41,7 +41,7 @@ async fn run_workers(cfg: WorkerConfig, workers: usize) -> anyhow::Result<()> {
     let cancel = CancellationToken::new();
     let tracker = TaskTracker::new();
     for _ in 0..workers {
-        spawn_one(&tracker, &cancel, cfg.clone());
+        spawn_one(&tracker, &cancel, cfg.clone())?;
     }
     tracker.close();
     wait_for_shutdown(&cancel).await;
@@ -49,21 +49,27 @@ async fn run_workers(cfg: WorkerConfig, workers: usize) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn spawn_one(tracker: &TaskTracker, cancel: &CancellationToken, cfg: WorkerConfig) {
+fn spawn_one(
+    tracker: &TaskTracker,
+    cancel: &CancellationToken,
+    cfg: WorkerConfig,
+) -> anyhow::Result<()> {
     let token = cancel.clone();
-    tracker.spawn(async move { worker_loop(cfg, token).await });
+    let queue = Arc::new(Queue::open(&cfg.queue_path).context("opening per-worker queue")?);
+    tracker.spawn(async move { worker_loop(queue, cfg, token).await });
+    Ok(())
 }
 
-async fn worker_loop(cfg: WorkerConfig, cancel: CancellationToken) {
+async fn worker_loop(queue: Arc<Queue>, cfg: WorkerConfig, cancel: CancellationToken) {
     let mut backoff = MIN_BACKOFF;
     let mut idle_at_max: u32 = 0;
     while !cancel.is_cancelled() {
-        if let Ok(true) = tick_once(&cfg).await {
+        if let Ok(true) = tick_once(&queue, &cfg).await {
             backoff = MIN_BACKOFF;
             idle_at_max = 0;
         } else {
             backoff = next_backoff(backoff);
-            idle_at_max = maybe_checkpoint(&cfg, backoff, idle_at_max).await;
+            idle_at_max = maybe_checkpoint(&queue, backoff, idle_at_max).await;
         }
         if sleep_or_cancel(&cancel, backoff).await {
             return;
@@ -71,9 +77,11 @@ async fn worker_loop(cfg: WorkerConfig, cancel: CancellationToken) {
     }
 }
 
-async fn tick_once(cfg: &WorkerConfig) -> anyhow::Result<bool> {
+async fn tick_once(queue: &Arc<Queue>, cfg: &WorkerConfig) -> anyhow::Result<bool> {
+    let q = Arc::clone(queue);
     let cfg = cfg.clone();
-    let outcome = tokio::task::spawn_blocking(move || stoa_capture::drain_once(&cfg)).await??;
+    let outcome =
+        tokio::task::spawn_blocking(move || stoa_capture::drain_once_with(&q, &cfg)).await??;
     Ok(outcome.is_some())
 }
 
@@ -81,7 +89,7 @@ async fn tick_once(cfg: &WorkerConfig) -> anyhow::Result<bool> {
 /// [`IDLE_CYCLES_PER_CHECKPOINT`], run a WAL truncate checkpoint and reset
 /// the counter. Failures are swallowed (best-effort) — a missed
 /// checkpoint just means the WAL keeps growing for one more cycle.
-async fn maybe_checkpoint(cfg: &WorkerConfig, backoff: Duration, idle: u32) -> u32 {
+async fn maybe_checkpoint(queue: &Arc<Queue>, backoff: Duration, idle: u32) -> u32 {
     if backoff < MAX_BACKOFF {
         return 0;
     }
@@ -89,13 +97,9 @@ async fn maybe_checkpoint(cfg: &WorkerConfig, backoff: Duration, idle: u32) -> u
     if next < IDLE_CYCLES_PER_CHECKPOINT {
         return next;
     }
-    let path: PathBuf = cfg.queue_path.clone();
-    let _ignored = tokio::task::spawn_blocking(move || {
-        let q = Queue::open(&path)?;
-        q.checkpoint()?;
-        Ok::<(), stoa_queue::Error>(())
-    })
-    .await;
+    let q = Arc::clone(queue);
+    let _ignored =
+        tokio::task::spawn_blocking(move || q.checkpoint().map_err(anyhow::Error::from)).await;
     0
 }
 

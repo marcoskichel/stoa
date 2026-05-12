@@ -64,14 +64,26 @@ struct Payload {
     agent_id: String,
 }
 
-/// Drain one queue row. Returns `None` on an empty queue.
+/// Drain one queue row from a freshly opened queue. Returns `None` on an
+/// empty queue.
 ///
-/// On `process()` error the row's `attempts` column is incremented and the
-/// row is released back to `pending`. Once `attempts` reaches
-/// [`MAX_ATTEMPTS`] the row is dead-lettered (`status='failed'`,
-/// `error_kind` recorded) so the worker stops looping on poison payloads.
+/// Convenience wrapper for one-shot callers (`stoa daemon --once`,
+/// integration tests). Long-running daemons should pin a single `Queue`
+/// per worker thread and use [`drain_once_with`] to avoid the per-tick
+/// `Connection::open` cost.
 pub fn drain_once(cfg: &WorkerConfig) -> Result<Option<DrainResult>> {
     let q = Queue::open(&cfg.queue_path)?;
+    drain_once_with(&q, cfg)
+}
+
+/// Drain one queue row using a caller-provided [`Queue`]. Returns `None`
+/// on an empty queue.
+///
+/// On `process()` error the row's `attempts` column is incremented and
+/// the row is released back to `pending`. Once `attempts` reaches
+/// [`MAX_ATTEMPTS`] the row is dead-lettered (`status='failed'`,
+/// `error_kind` recorded) so the worker stops looping on poison payloads.
+pub fn drain_once_with(q: &Queue, cfg: &WorkerConfig) -> Result<Option<DrainResult>> {
     let Some(claim) = q.claim(&worker_id(), DEFAULT_LEASE_SECS)? else {
         return Ok(None);
     };
@@ -81,7 +93,7 @@ pub fn drain_once(cfg: &WorkerConfig) -> Result<Option<DrainResult>> {
             Ok(Some(result))
         },
         Err(e) => {
-            handle_failure(&q, &claim, &e)?;
+            handle_failure(q, &claim, &e)?;
             Err(e)
         },
     }
