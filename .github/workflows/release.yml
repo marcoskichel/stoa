@@ -72,7 +72,7 @@ jobs:
           tar -czf "dist/stoa-${TARGET}.tar.gz" \
               -C "target/${TARGET}/release" "stoa${ext}" "stoa-hook${ext}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: stoa-${{ matrix.target }}
           path: dist/stoa-${{ matrix.target }}.tar.gz
