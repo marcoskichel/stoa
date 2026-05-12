@@ -21,6 +21,17 @@ test:
     cargo test --workspace --locked
     cd python && uv run pytest -q
 
+# End-to-end tests — quality gate for user-facing CLI behavior.
+# Builds the `stoa` binary then runs trycmd + integration tests.
+e2e:
+    cargo test -p stoa-cli --test '*' --locked
+    cargo test -p stoa-core --test '*' --locked
+
+# Snapshot review / regen for trycmd golden files.
+# Use after intentional output changes; review diff carefully.
+e2e-review:
+    TRYCMD=overwrite cargo test -p stoa-cli --test cli_cmd --locked
+
 # --------------------------------------------------------------------------
 # Lint / format
 # --------------------------------------------------------------------------
@@ -134,6 +145,7 @@ release target:
 ci-rust: lint lint-docs file-length
     cargo build --workspace --locked
     cargo test --workspace --locked
+    just e2e
 
 ci-python:
     cd python && uv sync --all-groups --locked

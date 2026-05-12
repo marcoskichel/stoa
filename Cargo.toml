@@ -53,6 +53,17 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 ratatui = "0.29"
 resvg = "0.45"
 
+# Time
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+
+# Test stack (dev-only) — see research note in CONTRIBUTING.md
+snapbox = "0.6"
+trycmd = "0.15"
+assert_fs = "1"
+predicates = "3"
+proptest = "1"
+tempfile = "3"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
