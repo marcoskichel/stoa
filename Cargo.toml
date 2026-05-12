@@ -34,7 +34,7 @@ clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 
 # Storage
-rusqlite = { version = "0.38", features = ["bundled", "fts5"] }
+rusqlite = { version = "0.38", features = ["bundled", "chrono", "serde_json", "uuid"] }
 
 # Serde
 serde = { version = "1", features = ["derive"] }
@@ -55,6 +55,15 @@ resvg = "0.45"
 
 # Time
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+
+# Async runtime extensions (cancellation tokens, task tracker)
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# Pattern matching (PII redaction + queue claim — M3)
+regex = "1"
+aho-corasick = "1"
+fancy-regex = "0.13"
+uuid = { version = "1", features = ["v4"] }
 
 # Test stack (dev-only) — see research note in CONTRIBUTING.md
 snapbox = "0.6"

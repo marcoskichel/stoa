@@ -8,5 +8,24 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[dependencies]
+stoa-core = { path = "../stoa-core", version = "0.1.0" }
+stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+aho-corasick = { workspace = true }
+fancy-regex = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+assert_fs = { workspace = true }
+
 [lints]
 workspace = true

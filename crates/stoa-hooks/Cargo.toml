@@ -12,5 +12,17 @@ authors.workspace = true
 name = "stoa-hook"
 path = "src/main.rs"
 
+[dependencies]
+stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+snapbox = { workspace = true }
+assert_fs = { workspace = true }
+tempfile = { workspace = true }
+
 [lints]
 workspace = true
