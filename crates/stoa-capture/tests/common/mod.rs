@@ -2,15 +2,11 @@
 
 #![expect(
     dead_code,
-    reason = "Helpers shared across test files; not all are used in every test."
+    reason = "Helpers shared across test files; not all are used in every test binary."
 )]
 #![expect(
     unreachable_pub,
     reason = "`tests/common/` is included via `mod common;` per integration-test binary; `pub` is needed for cross-file sharing."
-)]
-#![expect(
-    clippy::unwrap_used,
-    reason = "Test helpers panic on setup failure — fast-fail is intended."
 )]
 
 use stoa_capture::Redactor;
@@ -31,3 +27,8 @@ pub fn has_redaction_kind(s: &str, kind: &str) -> bool {
     let needle = format!("[REDACTED:{kind}");
     s.contains(&needle)
 }
+
+/// Placeholder helper to keep the file-level `dead_code` expectation
+/// fulfilled in every test binary — `redaction.rs` uses all three helpers
+/// above, so without an always-unused fourth, the expect goes vacuous.
+pub fn dead_code_sentinel() {}
