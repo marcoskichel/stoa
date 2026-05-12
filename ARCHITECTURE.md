@@ -830,6 +830,315 @@ A user who wants only Tier 0 can use Stoa as `stoa init` + their editor + git. A
 
 ---
 
+## 15. Language & runtime
+
+Stoa is a polyglot Rust + Python codebase in v0.1, with an explicit migration path to all-Rust by v0.3. The shape was picked after a stack-feasibility audit (May 2026) confirmed that all-Rust is viable today but ships behind a worse install experience than the polyglot path because of two specific dependencies in flux.
+
+### 15.1 The constraints that drive the choice
+
+Three hard constraints govern stack picks; everything else is preference:
+
+1. **Hooks must run in <10ms cold-start.** This is the hot path inside the agent's process. Any latency is felt by the user. `claude-mem` ships at 8ms p95 in TypeScript-on-Bun; an empty Rust binary on Linux starts in ~0.5ms, leaving abundant headroom for one SQLite insert + fsync. Python loses this constraint outright (cold-start ~150–250ms before user code runs).
+2. **`cargo install stoa` (or equivalent single-command install) must work on a fresh machine.** The first impression of a local-first tool dies if install is "first install Python, then `uv sync`, then…". Single-binary distribution is non-negotiable for the CLI and hook surfaces.
+3. **The LLM-heavy workers (harvest, crystallize) need first-class structured-extraction tooling, current LLM-provider features, and embedding inference that doesn't pull in CUDA or libtorch.** Python's `instructor` + `openai`/`anthropic` SDKs are the de facto standard here; the Rust equivalents exist but are younger.
+
+### 15.2 v0.1: Rust core + Python sidecar
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Rust binary (single static, ~5–8 MB)                        │
+│  ├── stoa CLI                  (clap + tokio)               │
+│  ├── hook scripts              (sub-3ms cold start)         │
+│  ├── capture worker            (regex redaction, SQLite)    │
+│  ├── viz worker                (resvg, ratatui, sixel)      │
+│  └── SQLite queue + FTS5       (rusqlite, WAL mode)         │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ shared SQLite queue (no IPC)
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Python sidecar daemon  (uv-bootstrapped venv in .stoa/)     │
+│  ├── harvest worker            (instructor + anthropic)     │
+│  ├── crystallize worker        (instructor + anthropic)     │
+│  └── embed worker              (sentence-transformers)      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Workers communicate only through the SQLite queue already in §7 — no sockets, no gRPC, no shared memory. Rust enqueues; Python dequeues; both update the same `recall.db`. The polyglot split is free because the IPC mechanism was already in the architecture for other reasons.
+
+`stoa init` bootstraps the Python venv via `uv` (fast, hermetic, no system Python pollution). Users still type one command to install Stoa, but two runtimes exist on disk afterwards.
+
+### 15.3 v0.2: migrate embedding worker to Rust
+
+Trigger: a CI spike validates that `fastembed` (Qdrant, v5.13.4, MIT) + `ort` (pykeio, v2.0, MIT) cross-compiles to all five release targets (linux x86_64/aarch64, macos x86_64/aarch64, windows x86_64) without a manual ONNX Runtime install on the target machine.
+
+Two candidate embedding paths, depending on what cross-compile reveals:
+
+| Path | CPU throughput | Cross-compile | Binary size | Choice criterion |
+|---|---|---|---|---|
+| `fastembed` + `ort` | ~400 sentences/sec (4× Python) | Hard — `ort` downloads ONNX Runtime shared lib at build time, target-specific binaries needed for each release artifact | +30–60 MB if static-linked | Pick if CI pipeline can produce target-specific release tarballs reliably |
+| `tract` (Sonos, MIT) | Slower; needs validation for transformer ops | Easy — pure Rust, no native deps | Smaller | Pick if `cargo install` portability matters more than throughput |
+
+Throughput target is "fast enough that embedding never blocks harvest." Stoa's harvest worker embeds dozens of pages per session, not millions per second — `tract`'s slower-but-portable path may be fine. The spike measures both and picks based on data, not aesthetics.
+
+Either way, Python `sentence-transformers` is gone in v0.2. LLM calls still go through Python.
+
+### 15.4 v0.3: full all-Rust (Shape B)
+
+Trigger: two independent conditions must both hold.
+
+1. **LanceDB Rust FTS migration is complete and stable.** As of May 2026, LanceDB is removing its Tantivy dependency in favor of a native Lance FTS layer (issue #2998). The Rust API for FTS exists (`FullTextSearchQuery`) but lacks boolean operators and trails the Python API. v0.3 trigger is: the Tantivy→native FTS migration shipped and the Rust FTS API has 60+ days of no breaking changes.
+2. **A primary Rust LLM client crate covers Anthropic features Stoa depends on.** Today the Anthropic Rust SDK situation is fragmented — `anthropic-sdk-rust`, `anthropic-ai-sdk`, `async-anthropic`, `rstructor` — with no official SDK. Trigger is either Anthropic publishing an official Rust SDK or one of the community crates becoming the clear winner with stable prompt-caching, extended-thinking, and batch-API support.
+
+When both hold, harvest and crystallize migrate to Rust:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Rust binary (single static, ~10–15 MB with embeddings)       │
+│  ├── stoa CLI / hooks / capture / viz                        │
+│  ├── harvest worker     (rstructor + Anthropic Rust SDK)     │
+│  ├── crystallize worker (rstructor + Anthropic Rust SDK)     │
+│  ├── embed worker       (fastembed/tract → bge-small ONNX)   │
+│  ├── SQLite queue + FTS5 (rusqlite)                          │
+│  └── LanceDB              (vector store, native Rust)        │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Single binary, single runtime, single `cargo install`. The Python sidecar disappears.
+
+### 15.5 Concrete crate picks (v0.1 frozen, v0.2+ subject to spike)
+
+**Rust side (frozen):**
+
+| Capability | Crate | Version (May 2026) | License | Rationale |
+|---|---|---|---|---|
+| CLI parsing | `clap` | 4.x | MIT/Apache | Standard. |
+| Async runtime | `tokio` | 1.x | MIT | Standard. The hook binary uses sync rusqlite, no tokio. |
+| SQLite | `rusqlite` | 0.38 | MIT | FTS5 first-class, simpler than `sqlx` for our worker pattern. WAL mode; build SQLite from source (`bundled` feature) for macOS fsync correctness. |
+| Frontmatter / YAML | `serde` + `serde_yaml` | 1.x / 0.9 | MIT/Apache | Standard. |
+| TLS | `rustls` (via `reqwest`) | 0.23 / 0.12 | Apache/ISC/MIT | No OpenSSL dependency; cross-compiles cleanly. |
+| TUI | `ratatui` | 0.29 | MIT | Sparklines, bars, lists. |
+| SVG | `resvg` | 0.x | MPL-2.0 (file-level copyleft, safe as binary dep) | SVG snapshot for terminal sixel + viz cache. |
+| Sixel | `libsixel` via `img2sixel` | n/a | MIT | Shell out for now; pure-Rust sixel crate when available. |
+
+**Python sidecar (v0.1 only):**
+
+| Capability | Package | Why this one |
+|---|---|---|
+| Structured extraction | `instructor` | De facto Python pattern; battle-tested. |
+| Anthropic SDK | `anthropic` | Official; full feature set. |
+| OpenAI SDK | `openai` | Official; full feature set. |
+| Embeddings | `sentence-transformers` + `chromadb` | Default models (bge-small-en-v1.5, bge-m3) ship out of the box. |
+| Env management | `uv` | Fast, hermetic, lockfile-driven; bootstraps in seconds. |
+
+**Rust side (v0.2/v0.3 candidates, contingent on spike):**
+
+| Capability | Candidate | Status |
+|---|---|---|
+| Embeddings (ONNX) | `fastembed` + `ort` | Production users (SurrealDB, swiftide). 4× Python throughput. Cross-compile pain. |
+| Embeddings (pure Rust) | `tract` | No native deps; slower; needs operator-coverage validation for bge-small. |
+| Structured extraction | `rstructor` | Real instructor-equivalent. v0.2.10 (May 2026). Anthropic + OpenAI + Gemini + Grok. Small user base — wrap behind internal trait so it can be swapped. |
+| OpenAI client | `async-openai` (64bit) | v0.38.1 (May 2026). Spec-driven, low feature lag. |
+| Anthropic client | `anthropic-async` or `anthropic-sdk-rust` | Fragmented; pin and abstract behind a trait. |
+| Multi-provider abstraction | `genai` | Optional thin layer if multi-provider matters more than per-provider feature depth. |
+| Vector store (Rust) | `lancedb` | v0.27.2. Apache-2.0. FTS API in flux; pin during Tantivy→native migration. |
+
+### 15.6 Rejected alternatives
+
+- **All-Python.** Hook latency budget (Python cold-start ~150–250ms) makes the hot path infeasible without a separate compiled hook binary, at which point the install story is already polyglot.
+- **All-TypeScript on Bun.** Real precedent (`claude-mem` ships at 8ms p95). Single ecosystem, good LLM SDKs. Rejected because: weaker SVG/terminal viz ecosystem than Rust, ML/embedding story still depends on calling Python or shelling to ONNX Runtime, binary distribution via `bun build --compile` is fiddly compared to `cargo install`. Reconsider only if Stoa's audience skews JS-first and Python install friction (in Shape A) kills adoption.
+- **All-Go.** Cold-start parity with Rust, simpler concurrency model, single binary trivial. Rejected because the Rust ecosystem for ML inference (`fastembed`, `candle`, `tract`) and structured extraction (`rstructor`) is meaningfully ahead of Go's, and Stoa needs both at v0.3.
+- **Raw `candle` for embeddings.** Open bug `huggingface/candle#2877` documents 8.5× CPU slowdown vs PyTorch on transformer inference (April 2025, still open May 2026). Use `fastembed` (ort-backed) or `tract` instead.
+- **`ort` static linking by default for v0.1.** Static linking ONNX Runtime increases binary size substantially and is not the documented happy path. Defer until v0.2 spike validates it.
+
+### 15.7 Decision summary
+
+| Tier | Stack | Distribution | Single-binary? |
+|---|---|---|---|
+| v0.1 | Rust CLI + hooks + capture + viz; Python sidecar for harvest/crystallize/embed | `cargo install stoa` + `stoa init` (which runs `uv sync`) | Hook + CLI yes; daemon no |
+| v0.2 | Rust everywhere except LLM calls (harvest/crystallize stay Python) | Same as v0.1, but smaller Python footprint | Mostly |
+| v0.3 | All Rust | `cargo install stoa` | Yes |
+
+The aesthetic preference for Shape B (all-Rust) is real and recognized. The reason it doesn't ship in v0.1 is that the embedding-inference cross-compile story and the LanceDB Rust FTS API are not stable enough today to risk on a first-impression install experience. v0.2 and v0.3 trigger criteria above are concrete and measurable; they are not vibes.
+
+---
+
+## 16. Repository layout & build tooling
+
+Stoa is a polyglot monorepo in v0.1 (Rust + Python) converging to all-Rust by v0.3. Tooling decisions favor native per-ecosystem workspace tools over a heavyweight monorepo orchestrator, on the grounds that the polyglot phase is temporary and Cargo workspace is the durable substrate.
+
+### 16.1 Tool pick
+
+**`Just` + Cargo workspace + `uv` workspace.** A single `Justfile` at the repo root drives cross-cutting tasks (build, test, lint, bench, release); each ecosystem uses its native workspace mechanism for dependency resolution and incremental builds. No additional monorepo abstraction layer.
+
+Alternatives evaluated and rejected:
+
+| Tool | Verdict |
+|---|---|
+| Moon (moonrepo.dev) | Worth it at v0.4+ when web UI lands and 3 ecosystems coexist permanently. Skip until then. |
+| Turborepo / Nx | TS-first; bad fit when Rust is the primary lang. |
+| Bazel | Hermetic build value gated behind weeks of BUILD-file authoring tax. Pick only at 10+ contributors with CI pain. |
+| Pants | Real polyglot story but heavy; same answer as Bazel — defer until pain justifies it. |
+| Plain shell scripts | Works at first; falls apart when CI matrix grows. `Just` is barely-more-than-shell with discoverability + dependency declaration. |
+
+The heuristic: invest in monorepo tooling proportional to the cost of *not* having it. v0.1's cost-of-not-having-it is "two `cd` commands in CI." That doesn't justify Moon, let alone Bazel.
+
+### 16.2 Layout
+
+```
+stoa/
+├── README.md
+├── PRODUCT.md
+├── ARCHITECTURE.md
+├── LICENSE
+├── Justfile                          # cross-cutting tasks
+├── rust-toolchain.toml
+├── Cargo.toml                        # workspace root
+├── crates/
+│   ├── stoa-core/                    # shared types: schema, frontmatter, ids
+│   ├── stoa-cli/                     # `stoa` binary (clap + tokio)
+│   ├── stoa-hooks/                   # hook binaries (per-platform thin wrappers)
+│   ├── stoa-queue/                   # SQLite queue (rusqlite + WAL)
+│   ├── stoa-capture/                 # capture worker + redaction
+│   ├── stoa-recall/                  # RecallBackend trait
+│   │   ├── src/
+│   │   └── backends/
+│   │       └── local-chroma-sqlite/  # default backend (v0.1)
+│   ├── stoa-viz/                     # viz module + worker
+│   ├── stoa-render-mermaid/          # mermaid backend
+│   ├── stoa-render-svg/              # resvg + Sigma snapshot
+│   ├── stoa-render-tui/              # ratatui + sixel
+│   └── stoa-bench/                   # LongMemEval runner
+├── python/                           # v0.1–v0.2 sidecar; deleted at v0.3
+│   ├── pyproject.toml                # uv workspace root
+│   ├── uv.lock
+│   ├── packages/
+│   │   ├── stoa-harvest/             # instructor + anthropic
+│   │   ├── stoa-crystallize/         # instructor + anthropic
+│   │   ├── stoa-embed/               # sentence-transformers
+│   │   └── stoa-shared/              # shared queue client
+│   └── tests/
+├── web/                              # reserved for v0.4+ web UI
+│   └── README.md                     # placeholder until then
+├── benchmarks/
+│   ├── corpus/                       # fixed test corpus (gitignored data; download script)
+│   ├── longmemeval/                  # reproducible runner
+│   └── results/                      # published recall@k per backend
+├── docs/                             # mkdocs source for stoa.dev (later)
+├── examples/                         # example workspaces
+│   ├── minimal/
+│   └── multi-agent/
+├── .github/
+│   └── workflows/
+│       ├── rust.yml                  # cargo build/test/clippy across targets
+│       ├── python.yml                # uv sync + pytest + ruff
+│       ├── release.yml               # cross-compile to 5 targets
+│       └── bench.yml                 # nightly LongMemEval against default backend
+└── .stoa-dev/                        # local dev workspace (gitignored)
+```
+
+Crate boundaries follow the worker boundaries in §7 — every async worker is a crate, communicating only through `stoa-queue`. The `stoa-cli` binary is a thin orchestrator that depends on the worker crates and exposes them as subcommands; long-running daemons spawn the worker crates as tokio tasks. The hook binaries depend only on `stoa-core` and `stoa-queue` to keep cold-start under §15's 10ms budget.
+
+### 16.3 Cargo workspace root
+
+```toml
+[workspace]
+resolver = "2"
+members = ["crates/*", "crates/stoa-recall/backends/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/kichelm/stoa"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.38", features = ["bundled", "fts5"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+ratatui = "0.29"
+resvg = "0.x"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+```
+
+### 16.4 uv workspace root (Python sidecar)
+
+```toml
+# python/pyproject.toml
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+stoa-shared = { workspace = true }
+```
+
+### 16.5 Justfile recipes
+
+```just
+default: build
+
+build:
+    cargo build --workspace --release
+    cd python && uv sync
+
+test:
+    cargo test --workspace
+    cd python && uv run pytest
+
+lint:
+    cargo clippy --workspace -- -D warnings
+    cargo fmt --check
+    cd python && uv run ruff check .
+    cd python && uv run ruff format --check .
+
+bench:
+    cargo run -p stoa-bench --release -- --backend local-chroma-sqlite
+
+install-dev:
+    cargo install --path crates/stoa-cli
+    cd python && uv sync
+
+release target:
+    cross build --release --target {{target}} -p stoa-cli
+    cross build --release --target {{target}} -p stoa-hooks
+
+ci-rust: build test lint
+ci-python:
+    cd python && uv sync && uv run pytest && uv run ruff check .
+```
+
+### 16.6 Migration when Python leaves at v0.3
+
+- Delete `python/` directory.
+- Move harvest/crystallize/embed into `crates/stoa-harvest`, `crates/stoa-crystallize`, `crates/stoa-embed` using `rstructor` + `fastembed`/`tract` per §15.
+- Drop Python recipes from `Justfile`.
+- Cargo workspace stays unchanged — purely additive.
+- Web UI added later under `web/` with `bun`/`pnpm` workspace independent of Cargo.
+
+No monorepo tool migration needed at v0.3. The dropped ecosystem is just a deleted directory.
+
+### 16.7 When to revisit
+
+Promote to Moon (or evaluate Pants/Bazel) when **all three** hold:
+
+1. Web UI ships (third permanent ecosystem alongside Rust + benchmark scripts).
+2. CI build time exceeds ~10 minutes on a clean cache.
+3. Affected-file detection across ecosystems would meaningfully cut PR feedback time.
+
+Until those hold, native workspace tools + `Just` is the right tool.
+
+---
+
 ## Open questions
 
 These are unresolved and will be decided as implementation progresses. Listed honestly so contributors know where the soft spots are.
