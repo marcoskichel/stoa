@@ -1,0 +1,18 @@
+[package]
+name = "hook-latency"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "stoa-hook-spike"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite = { version = "0.38", features = ["bundled"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+opt-level = 3

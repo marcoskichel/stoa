@@ -1,0 +1,3 @@
+model_load_ms=170
+n=12 embed_us=18161 throughput_texts_per_sec=660.8
+single_text_avg_us=1982

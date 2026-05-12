@@ -15,3 +15,21 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Rust
+target/
+**/target/
+Cargo.lock.bak
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.uv/
+
+# Spike scratch artifacts (kept for reproducibility but not committed)
+benchmarks/spike-m0/**/rust.json
+benchmarks/spike-m0/**/python.json
+benchmarks/spike-m0/**/build-*.log
+
+.fastembed_cache/

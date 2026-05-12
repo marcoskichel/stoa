@@ -1,0 +1,8 @@
+n         200
+min       1886 us
+p50       2137 us
+p95       2315 us
+p99       2370 us
+max       2413 us
+mean      2139 us
+stdev     122 us

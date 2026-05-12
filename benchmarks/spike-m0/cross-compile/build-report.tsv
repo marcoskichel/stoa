@@ -1,0 +1,6 @@
+target	status	size_bytes	duration_sec	notes
+x86_64-unknown-linux-gnu	OK	2468136	44	native
+aarch64-unknown-linux-gnu	OK	1760496	27	cross+linux-aarch64
+x86_64-apple-darwin	FAIL	0	1	needs-osxcross-image
+aarch64-apple-darwin	FAIL	0	0	needs-osxcross-image
+x86_64-pc-windows-gnu	OK	1790976	31	cross+mingw
