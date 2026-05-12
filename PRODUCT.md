@@ -2,7 +2,7 @@
 
 > The painted porch for AI memory.
 
-Stoa is an open-core knowledge + memory system for AI agents. It implements Andrej Karpathy's LLM Wiki pattern (compounding markdown pages curated by the LLM) and pairs it with a hybrid recall layer (BM25 + embeddings + a small knowledge graph), exposed through an MCP server that drops into Claude Code, Cursor, Codex, and any MCP-aware client.
+Stoa is an open-core knowledge + memory system for AI agents. It implements Andrej Karpathy's LLM Wiki pattern (compounding markdown pages curated by the LLM) and pairs it with a hybrid recall layer (BM25 + embeddings + a small knowledge graph). Capture is automatic — a Claude Code `Stop` hook (Cursor and Codex adapters next) writes the full session transcript into the workspace; an async worker redacts PII, harvests entities, and on a nightly schedule crystallizes synthesis pages. Agents query through `stoa query` via their existing shell tool. No MCP server required to ship value.
 
 The name comes from the *Stoa Poikile* — the Painted Porch in the Athenian Agora where Zeno of Citium gathered his school around 300 BCE. Knowledge accreted there through paced conversation. Stoa-the-tool is the same idea for AI agents: a place where what gets thought once stays thought, and compounds.
 
@@ -19,7 +19,7 @@ The gap is real. Nobody has shipped a working wiki + memory combo with honest be
 
 ## Audience
 
-**Primary**: Claude Code, Cursor, and Codex power users who already think in MCP and want a knowledge substrate that survives the session.
+**Primary**: Claude Code, Cursor, and Codex power users who want a knowledge substrate that survives the session and integrates through tools they already use (shell + hooks, no extra MCP wiring required).
 
 **Secondary**: small engineering teams who want a shared brain across agents — a workspace the team writes to once and reads from forever.
 
@@ -29,27 +29,35 @@ The gap is real. Nobody has shipped a working wiki + memory combo with honest be
 
 Three layers, each addressable on its own:
 
-1. **Wiki** — plain markdown on disk. Karpathy-compatible directory tree (`raw/`, `wiki/entities/`, `wiki/concepts/`, `wiki/synthesis/`, `index.md`, `log.md`). Obsidian-readable. Git-trackable. The LLM writes and lints these files directly through standard file tools.
+1. **Wiki** — plain markdown on disk. Karpathy-compatible directory tree. Obsidian-readable, git-trackable. The canonical store; everything else can be rebuilt from it.
+2. **Recall** — hybrid index over the wiki and session transcripts: BM25 + local embeddings + a small typed knowledge graph. Stored locally. No API calls required.
+3. **CLI + agent-platform hooks** — `stoa` CLI exposes every operation; small per-platform hook scripts capture session transcripts into a queue. Async workers do all the heavy work (redaction, harvest, crystallize) off the agent's hot path. An MCP wrapper is planned for v0.3 as optional sugar; v0.1 is hooks + CLI.
 
-2. **Recall** — hybrid index over the wiki and over raw session transcripts. BM25 + local embeddings (no API calls required) + a small knowledge graph for entity relationships. Stored locally in SQLite + a chosen vector backend (default LanceDB; ChromaDB available).
+### Design pillars
 
-3. **MCP server** — exposes ingest, query, lint, and crystallize operations as tools any MCP client can call. One install, one config block, drops into Claude Code / Cursor / Codex.
+The shape of the system, not the feature list. Each pillar is detailed in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-Two background processes sit on top:
-
-- **Lint** — deterministic auto-fixes (broken links, orphan pages, frontmatter validation) and heuristic reports (suspected contradictions, stale claims, missing entities). Runs on schedule or on-demand.
-- **Crystallize** — periodically promotes high-signal episodes from the recall layer into structured wiki pages, closing the loop between episodic and semantic memory. Karpathy's gist describes this; rohitg00's LLM Wiki v2 elaborates it; nobody has shipped it.
+- **Schema as product.** A `STOA.md` file at the workspace root encodes domain entity types, relationship vocabulary, ingest rules, quality bar, and privacy redactions. Loaded into every agent context. The most important file in the system.
+- **Capture without trusting the agent.** Session transcripts are captured by a deterministic platform hook in <10ms, written to a queue, redacted by a worker. The agent doesn't need to remember to "save" anything; passive capture is the floor. An optional `stoa note` lets the agent flag importance, but reliability never depends on it.
+- **Two-stage distillation.** Per-session **harvest** with strict quality gating extracts entities and decisions into the wiki. Nightly **crystallize** synthesizes cross-session essays as drafts and runs an explicit invalidation pass to retire stale claims. Single-pass distillation lags this approach by ~15 percentage points on the leading benchmarks.
+- **Lifecycle without decay theater.** Explicit supersession + staleness flags + git history. No silent decay scores, no Ebbinghaus forgetting curves on facts. Confidence scores live on relationships only and are derived, not gut-set.
+- **Event-driven automation.** Hook-triggered events (`agent.session.ended`, `transcript.captured`, `source.ingested`, `wiki.page.written`, `lint.tick`, `crystallize.tick`) run through async workers. User-extensible hooks (`.stoa/hooks/<event>/`).
+- **Privacy redaction at capture and ingest.** Rule-based PII/secret redaction applied before content reaches `raw/` or `sessions/`. In the OSS core, not the paid tier.
+- **Markdown is canonical.** The recall index is derived. Delete `.stoa/`, run `stoa rebuild`, get it all back. The user's knowledge survives Stoa.
 
 ## OSS core (MIT)
 
 - `stoa init` — scaffold wiki + config in any directory
+- `stoa hook install --platform claude-code` — register the agent capture hook
+- `stoa daemon` — run capture + harvest + scheduler workers
 - `stoa ingest` — ingest URLs, PDFs, markdown, plain text
 - `stoa query` — local hybrid search across wiki + sessions
+- `stoa harvest` / `stoa crystallize` — manual triggers for the distillation stages
 - `stoa lint` — wiki health check
-- `stoa crystallize` — promote recall content to wiki pages
-- MCP server with tools matching the CLI
+- `stoa note` — add a structured observation to the active session (agent or human)
+- Rule-based PII/secret redaction applied at capture and ingest
 - Reproducible LongMemEval benchmark scripts published from day one
-- Local-first: no required cloud, no API keys
+- Local-first: no required cloud, no required API keys
 
 ## Paid layer (planned, not promised)
 
@@ -72,7 +80,7 @@ Five things separate Stoa from the existing field.
 
 3. **Crystallization loop.** Episodic recall promoted to semantic wiki pages on a schedule. The feature multiple specs describe and nobody ships.
 
-4. **Local-first, MCP-native.** Runs entirely on the user's machine. Drops into Claude Code, Cursor, Codex via MCP with one config block. No mandatory cloud, no required API key.
+4. **Local-first, hook + CLI native.** Runs entirely on the user's machine. Captures session transcripts via a deterministic agent-platform hook (Claude Code `Stop` first; Cursor and Codex adapters next), and exposes every operation as a `stoa` CLI command any agent can invoke through its existing shell tool. CLI invocation is empirically more reliable than MCP tool calls on hard tasks (100% vs ~72% in published comparisons). MCP wrapper available later for clients that prefer the tool-panel UX.
 
 5. **Markdown on disk.** The wiki is plain files. Users can grep them, edit them in Obsidian, version them in git, take them with them. Recall is an index over those files, not the canonical store.
 
@@ -84,11 +92,11 @@ Not building: pure SaaS competitor to Notion / mem.ai / Reflect — that lane is
 
 ## Roadmap (rough)
 
-- **v0.1 — walking skeleton.** CLI + markdown wiki + basic BM25 recall + MCP server. Reproducible LongMemEval benchmark. Public.
-- **v0.2 — hybrid recall.** Embeddings + small KG. Lint operation with deterministic + heuristic checks.
-- **v0.3 — crystallization.** Promote-to-wiki loop. Decay/staleness flags.
-- **v0.4 — multi-agent.** Shared brain across agents. Conflict resolution.
-- **v1.0 — production.** Hardening, audit log, encryption-at-rest. Begin paid layer evaluation.
+- **v0.1 — walking skeleton.** CLI + markdown wiki + BM25 recall + Claude Code `Stop` hook + capture worker + PII redaction. Reproducible LongMemEval benchmark. Public.
+- **v0.2 — distillation + hybrid recall.** Embeddings + small typed KG. Harvest worker with quality gating. Lint with deterministic + heuristic checks. User-extensible event hooks.
+- **v0.3 — crystallize + lifecycle + cross-platform.** Crystallize loop with invalidation pass. Supersession + staleness flow. Cursor and Codex hook adapters. Optional MCP wrapper.
+- **v0.4 — multi-agent.** Shared brain across agents. Scoping, promotion, mesh sync, conflict resolution.
+- **v1.0 — production.** Hardening, audit log surface, encryption-at-rest for `sessions/`. Begin paid-layer evaluation.
 
 No dates promised. Shipped honestly or not at all.
 
@@ -100,4 +108,4 @@ The AI memory naming graveyard (mempalace, mem0, supermemory, cognee, zep, letta
 
 ## Status
 
-Pre-v0.1. PRODUCT.md is the only artifact. Code, benchmarks, and MCP server to follow.
+Pre-v0.1. PRODUCT.md and ARCHITECTURE.md are the only artifacts. Code, hook scripts, workers, and benchmarks to follow.
