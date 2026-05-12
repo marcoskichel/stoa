@@ -1,0 +1,12 @@
+[package]
+name = "stoa-render-mermaid"
+description = "Stoa viz backend: Mermaid markdown renderer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

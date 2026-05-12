@@ -1,0 +1,20 @@
+# Hard limits (paired with workspace.lints.clippy)
+too-many-lines-threshold = 25
+too-many-arguments-threshold = 5
+cognitive-complexity-threshold = 15
+type-complexity-threshold = 200
+single-char-binding-names-threshold = 4
+enum-variant-name-threshold = 3
+struct-field-name-threshold = 3
+large-error-threshold = 128
+
+# Tests are pragmatic
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = false
+allow-print-in-tests = true
+
+# Pin MSRV so suggested replacements stay within reach
+msrv = "1.95"
+avoid-breaking-exported-api = false

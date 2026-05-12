@@ -1,0 +1,144 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/stoa-core",
+    "crates/stoa-cli",
+    "crates/stoa-hooks",
+    "crates/stoa-queue",
+    "crates/stoa-capture",
+    "crates/stoa-recall",
+    "crates/stoa-recall/backends/local-chroma-sqlite",
+    "crates/stoa-viz",
+    "crates/stoa-render-mermaid",
+    "crates/stoa-render-svg",
+    "crates/stoa-render-tui",
+    "crates/stoa-bench",
+]
+exclude = [
+    "benchmarks/spike-m0",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+repository = "https://github.com/kichelm/stoa"
+authors = ["Stoa Contributors"]
+homepage = "https://github.com/kichelm/stoa"
+
+[workspace.dependencies]
+# CLI / runtime
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+
+# Storage
+rusqlite = { version = "0.38", features = ["bundled", "fts5"] }
+
+# Serde
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+
+# Errors / logging
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+
+# HTTP (rustls only — see deny.toml ban on native-tls)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+# Render / viz
+ratatui = "0.29"
+resvg = "0.45"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+opt-level = 3
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+# ---------------------------------------------------------------------------
+# Workspace lints (see clippy.toml for thresholds, deny.toml for supply chain).
+# Inherit in every member: `[lints]\nworkspace = true`.
+# Escape hatch: use `#[expect(<lint>, reason = "...")]`, never `#[allow]`.
+# Note: groups carry `priority = -1` so explicit per-lint settings win.
+# ---------------------------------------------------------------------------
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
+unused_macro_rules = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+single_use_lifetimes = "warn"
+let_underscore_drop = "warn"
+non_ascii_idents = "deny"
+unused_must_use = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+rust_2024_compatibility = { level = "warn", priority = -1 }
+future_incompatible = { level = "warn", priority = -1 }
+nonstandard_style = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+# Groups
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+
+# Pedantic downgrades — too noisy without losing real value
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+too_many_lines = "warn"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+
+# Cargo group quiet-down for pre-1.0 (re-enable before publish)
+multiple_crate_versions = "allow"
+cargo_common_metadata = "allow"
+
+# Restriction — handpicked
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+exit = "deny"
+mem_forget = "deny"
+lossy_float_literal = "deny"
+rest_pat_in_fully_bound_structs = "warn"
+str_to_string = "warn"
+get_unwrap = "deny"
+unwrap_in_result = "deny"
+unreachable = "deny"
+panic_in_result_fn = "deny"
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+clone_on_ref_ptr = "warn"
+self_named_module_files = "deny"
+verbose_file_reads = "warn"
+
+# Cherry-picked nursery (async / drop correctness)
+await_holding_lock = "deny"
+await_holding_invalid_type = "deny"
+large_futures = "warn"
+significant_drop_tightening = "warn"
+redundant_clone = "warn"
+debug_assert_with_mut_call = "warn"
+empty_line_after_doc_comments = "warn"

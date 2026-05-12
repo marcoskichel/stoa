@@ -26,6 +26,10 @@ Cargo.lock.bak
 __pycache__/
 *.pyc
 .uv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # Spike scratch artifacts (kept for reproducibility but not committed)
 benchmarks/spike-m0/**/rust.json
@@ -33,3 +37,13 @@ benchmarks/spike-m0/**/python.json
 benchmarks/spike-m0/**/build-*.log
 
 .fastembed_cache/
+
+# Release artifacts
+dist/
+
+# Local dev workspace
+.stoa-dev/
+
+# uv lock backup
+uv.lock.bak
+

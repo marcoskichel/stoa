@@ -1,0 +1,79 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use-cross: false
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use-cross: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            use-cross: false
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            use-cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            use-cross: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+
+      - uses: taiki-e/install-action@v2
+        if: matrix.use-cross
+        with:
+          tool: cross
+
+      - name: build stoa-cli + stoa-hooks
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          USE_CROSS: ${{ matrix.use-cross }}
+        run: |
+          if [ "$USE_CROSS" = "true" ]; then
+            cross build --release --locked --target "$TARGET" -p stoa-cli
+            cross build --release --locked --target "$TARGET" -p stoa-hooks
+          else
+            cargo build --release --locked --target "$TARGET" -p stoa-cli
+            cargo build --release --locked --target "$TARGET" -p stoa-hooks
+          fi
+
+      - name: package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p dist
+          ext=""
+          case "$TARGET" in *windows*) ext=".exe" ;; esac
+          tar -czf "dist/stoa-${TARGET}.tar.gz" \
+              -C "target/${TARGET}/release" "stoa${ext}" "stoa-hook${ext}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stoa-${{ matrix.target }}
+          path: dist/stoa-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
