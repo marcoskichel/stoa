@@ -1,0 +1,12 @@
+[package]
+name = "stoa-recall-local-chroma-sqlite"
+description = "Stoa default recall backend: ChromaDB + SQLite FTS5 + KG."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+[project]
+name = "stoa-harvest"
+version = "0.1.0"
+description = "Stoa Python sidecar: transcript harvest (instructor + anthropic)."
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = ["stoa-shared"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stoa_harvest"]

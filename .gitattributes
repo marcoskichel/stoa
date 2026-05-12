@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# Binary types — never touch
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.gz  binary
+*.zip binary
+*.pdf binary

@@ -1,0 +1,125 @@
+[project]
+name = "stoa-py"
+version = "0.1.0"
+description = "Stoa Python sidecar workspace root (transitional, leaves at v0.3)."
+requires-python = ">=3.13"
+license = "MIT"
+readme = "README.md"
+dependencies = [
+    "stoa-shared",
+    "stoa-harvest",
+    "stoa-crystallize",
+    "stoa-embed",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+stoa-shared = { workspace = true }
+stoa-harvest = { workspace = true }
+stoa-crystallize = { workspace = true }
+stoa-embed = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ruff>=0.7",
+    "basedpyright>=1.18",
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+testpaths = ["packages"]
+python_files = ["test_*.py"]
+
+# ---------------------------------------------------------------------------
+# Ruff: lint + format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["build", "dist", ".venv", "tests/fixtures"]
+
+[tool.ruff.lint]
+select = [
+    "F", "E", "W", "I", "N", "D", "UP",
+    "ANN", "ASYNC", "S", "BLE", "B", "A", "COM", "C4", "DTZ", "T10",
+    "EM", "FA", "ISC", "ICN", "LOG", "G", "INP", "PIE", "T20", "PYI",
+    "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TC", "INT",
+    "ARG", "PTH", "TD", "FIX", "ERA", "PD", "PGH", "PL", "TRY", "FLY",
+    "NPY", "PERF", "FURB", "RUF",
+]
+ignore = [
+    # Formatter handles these — disable to avoid conflicts.
+    "E501", "COM812", "ISC001",
+    # Spike-velocity pragmatic carve-outs for a v0.1 that will be rewritten in Rust.
+    "D100", "D104",
+    "D203", "D213",
+    "TD003", "FIX002",
+    "TRY003",
+    "EM101", "EM102",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["S101", "PLR2004", "ANN", "D", "SLF001", "PLR0915", "ARG", "INP001"]
+"scripts/**/*.py" = ["T201", "INP001"]
+
+[tool.ruff.lint.pylint]
+max-statements = 25
+max-args = 5
+max-positional-args = 3
+max-branches = 8
+max-returns = 4
+max-locals = 10
+max-bool-expr = 4
+max-nested-blocks = 4
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["stoa_harvest", "stoa_crystallize", "stoa_embed", "stoa_shared"]
+required-imports = ["from __future__ import annotations"]
+combine-as-imports = true
+force-sort-within-sections = true
+split-on-trailing-comma = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+docstring-code-format = true
+docstring-code-line-length = 80
+skip-magic-trailing-comma = false
+
+# ---------------------------------------------------------------------------
+# basedpyright (strict + reportAny)
+# ---------------------------------------------------------------------------
+[tool.basedpyright]
+include = ["packages"]
+exclude = ["**/__pycache__", ".venv", "build", "dist"]
+pythonVersion = "3.13"
+pythonPlatform = "Linux"
+typeCheckingMode = "strict"
+reportAny = "error"
+reportExplicitAny = "error"
+reportImplicitOverride = "error"
+reportUnreachable = "error"
+reportIgnoreCommentWithoutRule = "error"
+reportImplicitStringConcatenation = "error"
+reportMissingTypeStubs = "warning"
+reportUnknownMemberType = "error"
+reportUnknownArgumentType = "error"
+reportUnknownVariableType = "error"
+reportUnknownParameterType = "error"
+reportUnknownLambdaType = "error"
