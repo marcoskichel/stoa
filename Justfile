@@ -31,6 +31,11 @@ lint:
     cd python && uv run ruff check .
     cd python && uv run ruff format --check .
 
+# Flag doc comments that restate the identifier.
+# Self-built tool — see crates/stoa-doclint.
+lint-docs:
+    cargo run --quiet --locked -p stoa-doclint -- crates
+
 fmt:
     cargo fmt
     cd python && uv run ruff format .
@@ -126,7 +131,7 @@ release target:
 # CI gates
 # --------------------------------------------------------------------------
 
-ci-rust: lint file-length
+ci-rust: lint lint-docs file-length
     cargo build --workspace --locked
     cargo test --workspace --locked
 

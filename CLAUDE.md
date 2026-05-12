@@ -82,6 +82,7 @@ The lint configs are strict by design and CI runs `RUSTFLAGS="-D warnings"`. Rea
   - Function body ≤ **25 lines** — clippy `too_many_lines` (threshold in `clippy.toml`) + `scripts/check_lengths.py` for Python.
   - File ≤ **400 lines** — `scripts/check-file-length.sh` (Rust) + `scripts/check_lengths.py` (Python). Override via `LIMIT=` env var if absolutely necessary.
 - **Python** (`python/pyproject.toml`): basedpyright `typeCheckingMode = "strict"` with `reportAny = "error"` — `Any` is a hard error including via inference. Ruff selects ~40 rule families. `from __future__ import annotations` is required in every module (`isort.required-imports`).
+- **Trivial doc comments** (`crates/stoa-doclint`): a `syn`-based binary flags `///` comments that restate the identifier — e.g. `/// Crate version, sourced from Cargo.toml at build time.` above `pub const VERSION: &str = env!("CARGO_PKG_VERSION");`. Heuristic: every meaningful doc word (after stripping articles + `env!`-context filler) must appear in the identifier's word-tokens. Run via `just lint-docs`; wired into `just ci-rust`. The right move when flagged is almost always to **delete the comment** — if the doc had information beyond the identifier, the heuristic would not have flagged it.
 
 **Escape hatches — always required, never bare:**
 

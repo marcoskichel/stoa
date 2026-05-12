@@ -45,6 +45,7 @@ Highlights:
 - **Python**: full type coverage via `basedpyright --strict`; `Any` is an error, including the `reportAny` rule.
 - **Escape hatches**: use `#[expect(<lint>, reason = "...")]` in Rust and `# type: ignore[<rule>]` with explicit rule code in Python. Never bare `#[allow]` or `# noqa`.
 - Imports: `from __future__ import annotations` is required in every Python module.
+- **No trivial doc comments.** `just lint-docs` runs `stoa-doclint` (`crates/stoa-doclint`), a `syn`-based binary that flags `///` doc comments whose every meaningful word (after stopword + `env!`-context filler removal) already appears in the documented item's name. The rule is intentionally narrow — if it fires, the doc is restating the identifier; the right move is to delete it, not to soften the comment. Heuristic + fixtures are under `crates/stoa-doclint/`.
 
 ## Environment traps documented during M0 spike
 

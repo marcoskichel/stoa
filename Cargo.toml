@@ -13,6 +13,7 @@ members = [
     "crates/stoa-render-svg",
     "crates/stoa-render-tui",
     "crates/stoa-bench",
+    "crates/stoa-doclint",
 ]
 exclude = [
     "benchmarks/spike-m0",
