@@ -23,6 +23,7 @@ chrono = { workspace = true }
 snapbox = { workspace = true }
 trycmd = { workspace = true }
 assert_fs = { workspace = true }
+serde_yaml = { workspace = true }
 
 [lints]
 workspace = true

@@ -90,18 +90,40 @@ fn write_assigns_id_from_cli_argument() {
     );
 }
 
+/// Extract the `updated:` field from a page's frontmatter as a raw string.
+/// RFC-3339 fixed-width `Z` timestamps sort correctly lexicographically.
+#[expect(
+    clippy::expect_used,
+    reason = "Test helper; structural failure (no frontmatter, no `updated:`) is a test bug."
+)]
+fn extract_updated(page: &str) -> String {
+    let after_open = page.strip_prefix("---\n").expect("page starts with frontmatter open");
+    let end = after_open.find("\n---").expect("page has frontmatter close");
+    let yaml = &after_open[..end];
+    let value: serde_yaml::Value = serde_yaml::from_str(yaml).expect("frontmatter is valid YAML");
+    value
+        .get("updated")
+        .and_then(|v| v.as_str())
+        .expect("frontmatter has an `updated:` field")
+        .to_owned()
+}
+
 #[test]
 fn write_updates_existing_page_bumps_updated_timestamp() {
     let ws = workspace();
     init(&ws);
     let _out = write_entity(&ws, "ent-redis");
     let first = read_file(&ws, "wiki/entities/ent-redis.md");
-    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let first_updated = extract_updated(&first);
     write_file(&ws, "tmp/body.md", "Edited body.\n");
     let out = stoa(&ws, &["write", "ent-redis", "--body", "tmp/body.md"]);
     assert!(out.status.success(), "rewrite must succeed: {}", stderr(&out));
     let second = read_file(&ws, "wiki/entities/ent-redis.md");
-    assert_ne!(first, second, "rewrite must change the page on disk");
+    let second_updated = extract_updated(&second);
+    assert!(
+        second_updated >= first_updated,
+        "`updated` must not regress (first: {first_updated}, second: {second_updated})",
+    );
     assert!(contains(&second, "Edited body."));
 }
 
