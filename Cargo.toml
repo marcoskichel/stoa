@@ -135,6 +135,8 @@ clone_on_ref_ptr = "warn"
 self_named_module_files = "deny"
 verbose_file_reads = "warn"
 
+min_ident_chars = "warn"
+
 # Cherry-picked nursery (async / drop correctness)
 await_holding_lock = "deny"
 await_holding_invalid_type = "deny"
