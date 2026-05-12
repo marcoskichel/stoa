@@ -16,7 +16,12 @@ use rusqlite::Connection;
 use crate::error::Result;
 
 /// Current schema version. Bumped whenever a migration step is added.
-pub(crate) const USER_VERSION: i64 = 1;
+pub(crate) const USER_VERSION: i64 = 2;
+
+/// Default lane used by M3 capture inserts. M4 harvest will introduce
+/// additional lanes (e.g. `"harvest"`) without conflicting on the partial
+/// unique index, since the index is keyed by `(lane, session_id)`.
+pub(crate) const DEFAULT_LANE: &str = "capture";
 
 /// `CREATE TABLE IF NOT EXISTS` for the events queue.
 ///
@@ -35,16 +40,19 @@ CREATE TABLE IF NOT EXISTS queue_events (
     claimed_at INTEGER,
     lease_expires INTEGER,
     attempts INTEGER NOT NULL DEFAULT 0,
-    error_kind TEXT
+    error_kind TEXT,
+    lane TEXT NOT NULL DEFAULT 'capture'
 ) STRICT;";
 
-/// Partial unique index gating duplicate live rows by `session_id`.
+/// Partial unique index gating duplicate live rows by `(lane, session_id)`.
 ///
-/// Excludes `status='done'` and `status='failed'` so a session can be
-/// re-captured after the previous row has been completed or dead-lettered.
+/// Lane-aware so M4 harvest's `transcript.captured` event for a given
+/// session id can coexist with the M3 capture row. Excludes `done` +
+/// `failed` so a session can be re-enqueued after the previous row has
+/// been completed or dead-lettered.
 const CREATE_UNIQUE_INDEX: &str = "\
 CREATE UNIQUE INDEX IF NOT EXISTS queue_events_session_live \
-    ON queue_events(session_id) \
+    ON queue_events(lane, session_id) \
     WHERE status NOT IN ('done', 'failed');";
 
 /// Secondary index for the claim hot-path (status + `lease_expires`).
@@ -58,6 +66,14 @@ const ADD_ATTEMPTS_SQL: &str =
 
 /// `ADD COLUMN` for `error_kind`.
 const ADD_ERROR_KIND_SQL: &str = "ALTER TABLE queue_events ADD COLUMN error_kind TEXT;";
+
+/// `ADD COLUMN` for `lane` (with default so older rows migrate cleanly).
+const ADD_LANE_SQL: &str =
+    "ALTER TABLE queue_events ADD COLUMN lane TEXT NOT NULL DEFAULT 'capture';";
+
+/// Drop the legacy `(session_id)`-only partial index. Replaced by
+/// `queue_events_session_live` on `(lane, session_id)` in [`apply`].
+const DROP_LEGACY_INDEX_SQL: &str = "DROP INDEX IF EXISTS queue_events_session_live;";
 
 /// Fast-path probe: returns true when `PRAGMA user_version` already
 /// matches [`USER_VERSION`]. Callers (the hook hot-path) skip the
@@ -74,6 +90,7 @@ pub(crate) fn is_current(conn: &Connection) -> Result<bool> {
 pub(crate) fn apply(conn: &Connection) -> Result<()> {
     conn.execute_batch(CREATE_TABLE)?;
     migrate_to_v1(conn)?;
+    migrate_to_v2(conn)?;
     conn.execute_batch(CREATE_UNIQUE_INDEX)?;
     conn.execute_batch(CREATE_STATUS_INDEX)?;
     set_user_version(conn, USER_VERSION)?;
@@ -90,6 +107,17 @@ fn migrate_to_v1(conn: &Connection) -> Result<()> {
     if !column_exists(conn, "error_kind")? {
         conn.execute_batch(ADD_ERROR_KIND_SQL)?;
     }
+    Ok(())
+}
+
+fn migrate_to_v2(conn: &Connection) -> Result<()> {
+    if read_user_version(conn)? >= 2 {
+        return Ok(());
+    }
+    if !column_exists(conn, "lane")? {
+        conn.execute_batch(ADD_LANE_SQL)?;
+    }
+    conn.execute_batch(DROP_LEGACY_INDEX_SQL)?;
     Ok(())
 }
 

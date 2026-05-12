@@ -26,6 +26,11 @@ const DEFAULT_LEASE_SECS: i64 = 60;
 /// Worker identifier prefix; per-process id is appended at runtime.
 const WORKER_PREFIX: &str = "stoa-capture";
 
+/// Lane this worker claims from. `"capture"` is the M3 default; M4+
+/// harvest/embed will run on different lane names so the lanes never
+/// compete for each other's rows.
+const CAPTURE_LANE: &str = "capture";
+
 /// Max processing attempts before a row is dead-lettered (`status='failed'`).
 ///
 /// On every `process()` error the worker increments the row's `attempts`
@@ -84,7 +89,7 @@ pub fn drain_once(cfg: &WorkerConfig) -> Result<Option<DrainResult>> {
 /// [`MAX_ATTEMPTS`] the row is dead-lettered (`status='failed'`,
 /// `error_kind` recorded) so the worker stops looping on poison payloads.
 pub fn drain_once_with(q: &Queue, cfg: &WorkerConfig) -> Result<Option<DrainResult>> {
-    let Some(claim) = q.claim(&worker_id(), DEFAULT_LEASE_SECS)? else {
+    let Some(claim) = q.claim_on_lanes(&worker_id(), DEFAULT_LEASE_SECS, &[CAPTURE_LANE])? else {
         return Ok(None);
     };
     match process(cfg, &claim) {

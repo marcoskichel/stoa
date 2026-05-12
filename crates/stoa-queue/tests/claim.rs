@@ -63,6 +63,35 @@ fn complete_marks_row_done_and_excludes_from_claim() {
 }
 
 #[test]
+fn claim_respects_lane_filter() {
+    let (_tmp, q) = fresh_queue();
+    enqueue_session_ended(&q, "sess-cap-001").unwrap();
+    let payload = serde_json::json!({"session_id": "sess-cap-001"});
+    q.insert_lane("harvest", "transcript.captured", "sess-cap-001", &payload)
+        .unwrap();
+    let cap = q.claim_on_lanes("worker", 30, &["capture"]).unwrap();
+    assert!(cap.is_some(), "capture-lane claim must succeed");
+    assert_eq!(cap.unwrap().event, "agent.session.ended");
+    let harv = q.claim_on_lanes("worker", 30, &["harvest"]).unwrap();
+    assert!(harv.is_some(), "harvest-lane claim must succeed");
+    assert_eq!(harv.unwrap().event, "transcript.captured");
+}
+
+#[test]
+fn lane_aware_idempotency_index_lets_lanes_coexist() {
+    let (_tmp, q) = fresh_queue();
+    enqueue_session_ended(&q, "sess-share").unwrap();
+    let payload = serde_json::json!({"session_id": "sess-share"});
+    q.insert_lane("harvest", "transcript.captured", "sess-share", &payload)
+        .unwrap();
+    assert_eq!(
+        q.pending_count().unwrap(),
+        2,
+        "two rows with same session_id on different lanes must coexist",
+    );
+}
+
+#[test]
 fn idempotent_insert_after_complete_is_safe() {
     let (_tmp, q) = fresh_queue();
     enqueue_session_ended(&q, "sess-001").unwrap();

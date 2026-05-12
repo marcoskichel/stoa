@@ -76,21 +76,55 @@ impl Queue {
         Ok(Self { conn: Mutex::new(conn) })
     }
 
-    /// Insert one event. Idempotent on `session_id` while a prior row for
-    /// the same session is still live (status != 'done').
+    /// Insert one event on the default `"capture"` lane.
+    ///
+    /// Idempotent on `(lane, session_id)` while a prior live row exists.
+    /// Use [`Queue::insert_lane`] when targeting a non-default lane (e.g.
+    /// M4 harvest's `"harvest"` lane).
     pub fn insert(&self, event: &str, session_id: &str, payload: &Value) -> Result<()> {
+        self.insert_lane(schema::DEFAULT_LANE, event, session_id, payload)
+    }
+
+    /// Insert one event on the given lane. Idempotent on
+    /// `(lane, session_id)` while a prior live row exists.
+    pub fn insert_lane(
+        &self,
+        lane: &str,
+        event: &str,
+        session_id: &str,
+        payload: &Value,
+    ) -> Result<()> {
         let payload_str = serde_json::to_string(payload)?;
         with_conn(&self.conn, |c| {
-            c.execute(INSERT_SQL, params![session_id, event, payload_str])?;
+            c.execute(INSERT_SQL, params![lane, session_id, event, payload_str])?;
             Ok(())
         })
     }
 
-    /// Atomically claim the next available row (pending OR expired-lease).
+    /// Atomically claim the next available row across every lane.
+    ///
+    /// `worker_id` is recorded on the row for observability; `lease_secs`
+    /// is the expiry budget before another worker may re-claim. Pending
+    /// rows + claimed rows whose lease has expired are both eligible.
     pub fn claim(&self, worker_id: &str, lease_secs: i64) -> Result<Option<ClaimedRow>> {
+        self.claim_on_lanes(worker_id, lease_secs, &[])
+    }
+
+    /// Claim the next available row restricted to one of `lanes`.
+    ///
+    /// An empty slice means "every lane" (equivalent to [`Queue::claim`]).
+    /// Workers should pass their canonical lane name (`"capture"` for M3,
+    /// `"harvest"` for M4) so they never grab rows targeted at a different
+    /// worker pool.
+    pub fn claim_on_lanes(
+        &self,
+        worker_id: &str,
+        lease_secs: i64,
+        lanes: &[&str],
+    ) -> Result<Option<ClaimedRow>> {
         with_conn_mut(&self.conn, |c| {
             let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-            let row = claim_in_tx(&tx, worker_id, lease_secs)?;
+            let row = claim_in_tx(&tx, worker_id, lease_secs, lanes)?;
             tx.commit()?;
             Ok(row)
         })
@@ -226,11 +260,11 @@ fn with_conn_mut<R>(
 }
 
 /// `INSERT OR IGNORE` honors the partial unique index, giving us
-/// session-level idempotency without an extra round-trip.
+/// `(lane, session_id)`-level idempotency without an extra round-trip.
 const INSERT_SQL: &str = "\
 INSERT OR IGNORE INTO queue_events \
-    (session_id, event, payload, status, created_at) \
-    VALUES (?1, ?2, ?3, 'pending', unixepoch());";
+    (lane, session_id, event, payload, status, created_at) \
+    VALUES (?1, ?2, ?3, ?4, 'pending', unixepoch());";
 
 const COMPLETE_SQL: &str = "UPDATE queue_events SET status='done' WHERE id=?1;";
 
