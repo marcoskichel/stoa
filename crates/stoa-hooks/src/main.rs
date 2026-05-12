@@ -8,9 +8,11 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use anyhow::{Context, anyhow};
 use chrono::{SecondsFormat, Utc};
 use clap::Parser;
 use serde_json::json;
+use stoa_core::SessionId;
 
 /// CLI args for the `stoa-hook` binary.
 #[derive(Debug, Parser)]
@@ -42,14 +44,17 @@ fn main() -> ExitCode {
 
 fn run() -> anyhow::Result<()> {
     let args = Args::parse();
+    let sid = SessionId::parse(&args.session_id)
+        .ok_or_else(|| anyhow!("invalid --session-id `{}`", args.session_id))
+        .context("rejecting unsafe session id (path-traversal guard)")?;
     let payload = json!({
-        "session_id": args.session_id,
+        "session_id": sid.raw,
         "session_path": args.session_path,
         "agent_id": args.agent_id,
         "ts": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
     });
     let q = stoa_queue::Queue::open(&args.queue)?;
-    q.insert("agent.session.ended", &args.session_id, &payload)?;
+    q.insert("agent.session.ended", &sid.raw, &payload)?;
     Ok(())
 }
 

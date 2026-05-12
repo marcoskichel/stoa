@@ -141,6 +141,46 @@ fn worker_returns_none_on_empty_queue() {
     assert!(result.is_none(), "draining an empty queue must return None");
 }
 
+#[expect(clippy::unwrap_used, reason = "Test helper.")]
+fn enqueue_raw_payload(cfg: &WorkerConfig, session_id: &str, session_path: &str) {
+    let q = Queue::open(&cfg.queue_path).unwrap();
+    let payload = serde_json::json!({
+        "session_id": session_id,
+        "session_path": session_path,
+        "agent_id": "claude-code",
+    });
+    q.insert("agent.session.ended", session_id, &payload)
+        .unwrap();
+}
+
+#[test]
+fn worker_rejects_absolute_path_outside_workspace_root() {
+    let (_tmp, cfg) = workspace();
+    enqueue_raw_payload(&cfg, "sess-escape-abs", "/etc/shadow");
+    for _ in 0..6 {
+        let outcome = stoa_capture::drain_once(&cfg);
+        if outcome.is_ok() {
+            break;
+        }
+    }
+    let q = Queue::open(&cfg.queue_path).unwrap();
+    assert_eq!(q.failed_count().unwrap(), 1, "outside-root path must dead-letter");
+}
+
+#[test]
+fn worker_rejects_relative_traversal_payload() {
+    let (_tmp, cfg) = workspace();
+    enqueue_raw_payload(&cfg, "sess-escape-rel", "../../../etc/shadow");
+    for _ in 0..6 {
+        let outcome = stoa_capture::drain_once(&cfg);
+        if outcome.is_ok() {
+            break;
+        }
+    }
+    let q = Queue::open(&cfg.queue_path).unwrap();
+    assert_eq!(q.failed_count().unwrap(), 1, "traversal path must dead-letter");
+}
+
 #[test]
 fn worker_dead_letters_poison_payload_after_max_attempts() {
     let (tmp, cfg) = workspace();

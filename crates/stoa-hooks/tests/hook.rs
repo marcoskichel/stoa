@@ -56,6 +56,28 @@ fn hook_persists_session_path_in_payload() {
 }
 
 #[test]
+fn hook_rejects_path_traversal_session_id() {
+    let (_tmp, queue) = fresh_queue_path();
+    let out = snapbox::cmd::Command::new(snapbox::cmd::cargo_bin!("stoa-hook"))
+        .args([
+            "--queue",
+            queue.to_str().unwrap(),
+            "--session-id",
+            "../../etc/foo",
+            "--session-path",
+            "/tmp/whatever.jsonl",
+            "--agent-id",
+            "test",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !out.status.success(),
+        "path-traversal session-id must be rejected before insert",
+    );
+}
+
+#[test]
 fn hook_exits_non_zero_when_queue_path_unwritable() {
     // NOTE: /proc is virtual + read-only; opening a SQLite file there must fail.
     let out = snapbox::cmd::Command::new(snapbox::cmd::cargo_bin!("stoa-hook"))

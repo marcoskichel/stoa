@@ -13,6 +13,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use stoa_core::SessionId;
 use stoa_queue::{ClaimedRow, Queue};
 
 use crate::audit;
@@ -114,14 +115,14 @@ fn handle_failure(q: &Queue, claim: &ClaimedRow, err: &Error) -> Result<()> {
 
 fn process(cfg: &WorkerConfig, claim: &ClaimedRow) -> Result<DrainResult> {
     let payload = parse_payload(&claim.payload)?;
-    let source = resolve_source(cfg, &payload.session_path);
-    let output = cfg
-        .sessions_dir
-        .join(format!("{}.jsonl", payload.session_id));
+    let sid = SessionId::parse(&payload.session_id)
+        .ok_or(Error::PayloadRejected("session_id failed grammar check"))?;
+    let source = resolve_source(cfg, &payload.session_path)?;
+    let output = cfg.sessions_dir.join(format!("{sid}.jsonl"));
     redact_to_disk(&source, &output)?;
-    audit::append_capture(&cfg.audit_log, &payload.session_id, &payload.agent_id)?;
+    audit::append_capture(&cfg.audit_log, &sid.raw, &payload.agent_id)?;
     Ok(DrainResult {
-        session_id: payload.session_id,
+        session_id: sid.raw,
         output_path: output,
     })
 }
@@ -137,7 +138,31 @@ fn parse_payload(raw: &str) -> Result<Payload> {
     Ok(p)
 }
 
-fn resolve_source(cfg: &WorkerConfig, raw: &str) -> PathBuf {
+/// Resolve `raw` against the workspace root and harden against traversal.
+///
+/// Canonicalizes via `fs::canonicalize` so symlinks + `..` segments are
+/// collapsed; the resulting path must (a) live under
+/// [`WorkerConfig::workspace_root`] and (b) refer to a regular file with
+/// no `is_symlink()` ancestor at the leaf. Rejection is mapped to
+/// [`Error::PayloadRejected`] so the row dead-letters instead of looping.
+fn resolve_source(cfg: &WorkerConfig, raw: &str) -> Result<PathBuf> {
+    let candidate = build_candidate(cfg, raw);
+    if fs::symlink_metadata(&candidate)
+        .map_err(Error::Io)?
+        .file_type()
+        .is_symlink()
+    {
+        return Err(Error::PayloadRejected("session_path is a symlink"));
+    }
+    let canonical = fs::canonicalize(&candidate).map_err(Error::Io)?;
+    let root = fs::canonicalize(&cfg.workspace_root).map_err(Error::Io)?;
+    if !canonical.starts_with(&root) {
+        return Err(Error::PayloadRejected("session_path escapes workspace root"));
+    }
+    Ok(canonical)
+}
+
+fn build_candidate(cfg: &WorkerConfig, raw: &str) -> PathBuf {
     let p = Path::new(raw);
     if p.is_absolute() {
         p.to_path_buf()

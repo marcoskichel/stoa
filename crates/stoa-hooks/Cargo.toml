@@ -13,6 +13,7 @@ name = "stoa-hook"
 path = "src/main.rs"
 
 [dependencies]
+stoa-core = { path = "../stoa-core", version = "0.1.0" }
 stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
 anyhow = { workspace = true }
 serde_json = { workspace = true }

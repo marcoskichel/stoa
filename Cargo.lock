@@ -1223,6 +1223,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "stoa-core",
  "stoa-queue",
  "thiserror",
  "tracing",
@@ -1278,6 +1279,7 @@ dependencies = [
  "clap",
  "serde_json",
  "snapbox",
+ "stoa-core",
  "stoa-queue",
 ]
 

@@ -112,9 +112,55 @@ impl std::fmt::Display for Id {
     }
 }
 
+/// Max session-id length, matching [`MAX_ID_LEN`] for [`Id`]. Keeps the
+/// `sessions/<id>.jsonl` path well under the typical 255-byte filename cap.
+const MAX_SESSION_ID_LEN: usize = 128;
+
+/// A capture-pipeline session id (Claude Code / Cursor / etc).
+///
+/// Session ids come from upstream agent platforms (UUIDs, slugs, hex
+/// strings, etc.) so we use a wider grammar than [`Id`]: ASCII alnum plus
+/// `-`, `_`, `.` — but never `..`, `/`, `\`, NUL, leading `.`, or any
+/// non-ASCII byte. This makes a parsed [`SessionId`] structurally safe to
+/// interpolate into a filesystem path (e.g. `sessions/<id>.jsonl`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SessionId {
+    /// Full id as supplied by the agent platform.
+    pub raw: String,
+}
+
+impl SessionId {
+    /// Parse a session id. Returns `None` for ids that would be unsafe to
+    /// use as a path component: empty, longer than 128 bytes, contain `/`,
+    /// `\`, `..`, NUL, leading `.`, or any non-ASCII byte.
+    #[must_use]
+    pub fn parse(raw: &str) -> Option<Self> {
+        if raw.is_empty() || raw.len() > MAX_SESSION_ID_LEN {
+            return None;
+        }
+        if raw.starts_with('.') || raw.contains("..") {
+            return None;
+        }
+        if !raw.chars().all(is_session_char) {
+            return None;
+        }
+        Some(Self { raw: raw.to_owned() })
+    }
+}
+
+fn is_session_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')
+}
+
+impl std::fmt::Display for SessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.raw)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Id, PageDir};
+    use super::{Id, PageDir, SessionId};
 
     #[test]
     fn parses_entity_prefix() {
@@ -187,5 +233,42 @@ mod tests {
     fn accepts_digits_and_mixed() {
         assert!(Id::parse("ent-redis-7").is_some());
         assert!(Id::parse("con-rfc-3339").is_some());
+    }
+
+    #[test]
+    fn session_id_accepts_realistic_shapes() {
+        assert!(SessionId::parse("sess-001").is_some());
+        assert!(SessionId::parse("sess-A").is_some());
+        assert!(SessionId::parse("550e8400-e29b-41d4-a716-446655440000").is_some());
+        assert!(SessionId::parse("claude_2025_05_12").is_some());
+        assert!(SessionId::parse("Session.001").is_some());
+    }
+
+    #[test]
+    fn session_id_rejects_path_traversal() {
+        assert!(SessionId::parse("../../etc/foo").is_none());
+        assert!(SessionId::parse("..").is_none());
+        assert!(SessionId::parse("foo..bar").is_none());
+        assert!(SessionId::parse("/abs/path").is_none());
+        assert!(SessionId::parse("a/b").is_none());
+        assert!(SessionId::parse("a\\b").is_none());
+    }
+
+    #[test]
+    fn session_id_rejects_hidden_and_empty() {
+        assert!(SessionId::parse("").is_none());
+        assert!(SessionId::parse(".hidden").is_none());
+    }
+
+    #[test]
+    fn session_id_rejects_non_ascii_and_nul() {
+        assert!(SessionId::parse("sess-café").is_none());
+        assert!(SessionId::parse("sess\0bar").is_none());
+    }
+
+    #[test]
+    fn session_id_rejects_overlong() {
+        let raw = "a".repeat(200);
+        assert!(SessionId::parse(&raw).is_none());
     }
 }
