@@ -154,7 +154,7 @@ fn parse_bullet_token(line: &str) -> Option<String> {
     let body = trimmed
         .strip_prefix("- ")
         .or_else(|| trimmed.strip_prefix("* "))?;
-    // Take the first backtick-quoted token (`foo`) or the first word.
+    // NOTE: prefer the first backtick-quoted token over a bare word so prose around it is ignored.
     if let Some(rest) = body.strip_prefix('`') {
         let end = rest.find('`')?;
         return Some(rest[..end].to_owned());

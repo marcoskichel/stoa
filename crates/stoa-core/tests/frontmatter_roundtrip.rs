@@ -93,7 +93,7 @@ fn unknown_status_is_rejected() {
 fn entity_requires_type_field() {
     let yaml = "id: ent-bad\nkind: entity\ntitle: Bad\nstatus: active\n\
                 created: 2026-05-12T00:00:00Z\nupdated: 2026-05-12T00:00:00Z\n";
-    // No `type:` — entities require it per ARCHITECTURE §2.
+    // NOTE: intentionally missing `type:` — entities require it per ARCHITECTURE §2.
     let parsed: Result<Frontmatter, _> = serde_yaml::from_str(yaml);
     assert!(parsed.is_err(), "entity without `type:` must not parse");
 }

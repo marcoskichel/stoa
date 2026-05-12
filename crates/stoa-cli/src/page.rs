@@ -35,7 +35,7 @@ pub(crate) fn split_page(text: &str, path: &str) -> anyhow::Result<ParsedPage> {
 }
 
 fn find_closing_delim(rest: &str) -> Option<usize> {
-    // Look for a line that's exactly `---` (LF or CRLF terminated).
+    // NOTE: only an exact `---` line (LF or CRLF) closes the frontmatter — substrings shouldn't.
     let bytes = rest.as_bytes();
     let mut i = 0_usize;
     while i < bytes.len() {

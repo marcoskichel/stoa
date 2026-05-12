@@ -221,7 +221,7 @@ fn write_synthesis_page_lands_in_synthesis_directory() {
 #[test]
 fn write_without_init_exits_non_zero() {
     let ws = workspace();
-    // No init: workspace not scaffolded.
+    // NOTE: intentionally skipping init — asserts workspace-detection error path.
     write_file(&ws, "tmp/fm.yaml", ENTITY_FM);
     write_file(&ws, "tmp/body.md", ENTITY_BODY);
     let out = stoa(

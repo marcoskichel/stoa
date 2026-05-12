@@ -98,7 +98,7 @@ fn schema_check_rejects_missing_required_field() {
         &ws,
         "entities",
         "ent-missing-title",
-        // No `title:` field.
+        // NOTE: intentionally missing `title:` — asserts required-field rejection.
         "kind: entity\ntype: library\nstatus: active\n\
          created: 2026-05-12T00:00:00Z\nupdated: 2026-05-12T00:00:00Z",
     );
@@ -151,7 +151,7 @@ fn schema_check_rejects_invalid_status() {
 #[test]
 fn schema_check_outside_workspace_exits_non_zero() {
     let ws = workspace();
-    // Deliberately no init.
+    // NOTE: intentionally skipping init — asserts workspace-detection error path.
     let out = stoa(&ws, &["schema", "--check"]);
     assert!(!out.status.success(), "schema check must fail outside workspace");
 }

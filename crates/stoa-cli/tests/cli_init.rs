@@ -55,7 +55,7 @@ fn init_writes_default_stoa_md() {
     init(&ws);
     let body = read_file(&ws, "STOA.md");
     assert!(!body.trim().is_empty(), "STOA.md must not be empty");
-    // Schema file must mention at least one default entity type + relationship.
+    // NOTE: STOA.md default template must surface vocabulary per ARCHITECTURE §3.
     assert!(
         contains(&body, "library") || contains(&body, "decision"),
         "default STOA.md missing entity type vocabulary: {body}",
@@ -89,7 +89,7 @@ fn init_log_md_records_init_event() {
     let ws = workspace();
     init(&ws);
     let log = read_file(&ws, "wiki/log.md");
-    // log.md format from ARCHITECTURE §2: timestamped, one line per event.
+    // NOTE: log.md is an append-only journal per ARCHITECTURE §2 — init is an event.
     assert!(!log.trim().is_empty(), "log.md must record init event, not be empty");
     assert!(contains(&log, "init"), "log.md must mention `init`; got: {log:?}");
 }
@@ -97,7 +97,7 @@ fn init_log_md_records_init_event() {
 #[test]
 fn init_in_corrupt_partial_workspace_repairs_missing_dirs() {
     let ws = workspace();
-    // Simulate a workspace where the user deleted .stoa/ to force a rebuild.
+    // NOTE: deleting `.stoa/` is the documented disaster-recovery path (ARCH §1).
     init(&ws);
     std::fs::remove_dir_all(ws.path().join(".stoa")).unwrap();
     let out = stoa(&ws, &["init"]);
