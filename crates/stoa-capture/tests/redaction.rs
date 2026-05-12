@@ -164,6 +164,19 @@ fn jsonl_with_bearer_token_remains_parseable() {
 }
 
 #[test]
+fn clean_lines_skip_replace_loop() {
+    let r = default_redactor();
+    let mut lines = String::with_capacity(1024 * 1024);
+    while lines.len() < 1024 * 1024 {
+        lines.push_str(r#"{"role":"user","text":"the quick brown fox jumps"}\n"#);
+    }
+    for line in lines.lines() {
+        let out = r.redact_line(line);
+        assert_eq!(out, line, "clean line must round-trip byte-for-byte");
+    }
+}
+
+#[test]
 fn jsonl_with_ssh_path_remains_parseable() {
     let r = default_redactor();
     let line = r#"{"file":"/home/alice/.ssh/id_rsa","next":"y"}"#;
