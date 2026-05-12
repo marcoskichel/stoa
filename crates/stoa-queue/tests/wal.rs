@@ -1,4 +1,4 @@
-//! E2E quality gate: queue runs in WAL mode + busy_timeout respected.
+//! E2E quality gate: queue runs in WAL mode + `busy_timeout` respected.
 //!
 //! Spec source: [ARCHITECTURE.md §15] + [CLAUDE.md] — `rusqlite` v0.38,
 //! WAL mode, `synchronous=NORMAL`, FTS5 schema in same DB.
@@ -18,7 +18,7 @@ fn queue_runs_in_wal_mode() {
 fn queue_uses_synchronous_normal() {
     let (_tmp, q) = fresh_queue();
     let sync = q.pragma_synchronous().unwrap();
-    // sqlite returns sync mode as int: 0=OFF, 1=NORMAL, 2=FULL, 3=EXTRA
+    // NOTE: sqlite returns sync mode as int: 0=OFF, 1=NORMAL, 2=FULL, 3=EXTRA
     assert_eq!(sync, 1, "queue must use synchronous=NORMAL");
 }
 

@@ -1,10 +1,6 @@
 //! Shared helpers for `stoa-queue` integration tests.
 
 #![expect(
-    dead_code,
-    reason = "Helpers shared across test files; not all are used in every test."
-)]
-#![expect(
     unreachable_pub,
     reason = "`tests/common/` is included via `mod common;` per integration-test binary; `pub` is needed for cross-file sharing."
 )]
