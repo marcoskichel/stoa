@@ -245,9 +245,7 @@ fn open_dest_safely(dest: &Path) -> Result<File> {
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
             let meta = fs::symlink_metadata(dest)?;
             if !meta.file_type().is_file() {
-                return Err(Error::PayloadRejected(
-                    "output path exists but is not a regular file",
-                ));
+                return Err(Error::PayloadRejected("output path exists but is not a regular file"));
             }
             let f = OpenOptions::new().write(true).truncate(true).open(dest)?;
             Ok(f)

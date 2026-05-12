@@ -214,10 +214,7 @@ fn worker_refuses_to_follow_audit_log_symlink() {
         let _ignored = stoa_capture::drain_once(&cfg);
     }
     let body = fs::read_to_string(&target).unwrap();
-    assert!(
-        body.is_empty(),
-        "symlink target must remain untouched: {body:?}",
-    );
+    assert!(body.is_empty(), "symlink target must remain untouched: {body:?}");
     let q = Queue::open(&cfg.queue_path).unwrap();
     assert_eq!(q.failed_count().unwrap(), 1, "symlinked audit log must dead-letter");
 }

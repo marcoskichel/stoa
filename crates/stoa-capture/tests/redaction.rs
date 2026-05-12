@@ -134,10 +134,7 @@ fn redacts_ghr_refresh_token() {
     let r = default_redactor();
     let key = format!("ghr_{}", "a".repeat(40));
     let out = r.redact_line(&format!("refresh: {key}"));
-    assert!(
-        has_redaction_kind(&out, "github-refresh"),
-        "ghr_ token not redacted: {out:?}",
-    );
+    assert!(has_redaction_kind(&out, "github-refresh"), "ghr_ token not redacted: {out:?}");
     assert!(!out.contains(&key));
 }
 

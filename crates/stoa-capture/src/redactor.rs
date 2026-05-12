@@ -37,8 +37,8 @@ impl Redactor {
     /// allocating, which is the common case on captured transcripts.
     pub fn with_defaults() -> Self {
         let rules: Vec<Rule> = DEFAULTS.iter().filter_map(compile_rule).collect();
-        let prefilter = RegexSet::new(DEFAULTS.iter().map(|p| p.regex))
-            .unwrap_or_else(|_| RegexSet::empty());
+        let prefilter =
+            RegexSet::new(DEFAULTS.iter().map(|p| p.regex)).unwrap_or_else(|_| RegexSet::empty());
         Self { rules, prefilter }
     }
 
