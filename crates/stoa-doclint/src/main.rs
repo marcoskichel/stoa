@@ -46,8 +46,8 @@ fn main() -> ExitCode {
         cli.paths
     };
     let findings = lint::run(&roots);
-    for f in &findings {
-        println!("{f}");
+    for finding in &findings {
+        println!("{finding}");
     }
     if findings.is_empty() {
         println!("OK: no forbidden comments in {} root(s).", roots.len());

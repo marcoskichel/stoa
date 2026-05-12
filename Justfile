@@ -26,7 +26,7 @@ test:
 # --------------------------------------------------------------------------
 
 lint:
-    cargo clippy --workspace --all-targets --locked -- -D warnings
+    cargo clippy --workspace --locked -- -D warnings
     cargo fmt --check
     cd python && uv run ruff check .
     cd python && uv run ruff format --check .

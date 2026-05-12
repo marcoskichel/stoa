@@ -25,22 +25,22 @@ pub(crate) fn run(roots: &[PathBuf]) -> Vec<Finding> {
             continue;
         }
         for entry in WalkDir::new(root).into_iter().flatten() {
-            let p = entry.path();
-            if is_rust_source(p) && !is_excluded(p) {
-                out.extend(check_file(p));
+            let path = entry.path();
+            if is_rust_source(path) && !is_excluded(path) {
+                out.extend(check_file(path));
             }
         }
     }
     out
 }
 
-fn is_rust_source(p: &Path) -> bool {
-    p.is_file() && p.extension().is_some_and(|e| e == "rs")
+fn is_rust_source(path: &Path) -> bool {
+    path.is_file() && path.extension().is_some_and(|ext| ext == "rs")
 }
 
-fn is_excluded(p: &Path) -> bool {
-    p.components()
-        .any(|c| matches!(c.as_os_str().to_str(), Some("target" | "fixtures" | ".git")))
+fn is_excluded(path: &Path) -> bool {
+    path.components()
+        .any(|comp| matches!(comp.as_os_str().to_str(), Some("target" | "fixtures" | ".git")))
 }
 
 fn check_file(path: &Path) -> Vec<Finding> {

@@ -81,7 +81,7 @@ pub(crate) fn check_source(path: &Path, src: &str) -> Vec<Finding> {
                 snippet: snippet(slice),
             });
         }
-        line += slice.bytes().filter(|b| *b == b'\n').count();
+        line += slice.bytes().filter(|byte| *byte == b'\n').count();
         offset = end;
     }
     out
@@ -97,8 +97,8 @@ fn classify(slice: &str, kind: TokenKind) -> Option<Kind> {
     }
 }
 
-fn is_doc_line(s: &str) -> bool {
-    s.starts_with("///") || s.starts_with("//!")
+fn is_doc_line(slice: &str) -> bool {
+    slice.starts_with("///") || slice.starts_with("//!")
 }
 
 /// Rust reference: `/** ... */` is outer doc and `/*! ... */` is inner doc,
@@ -107,11 +107,11 @@ fn is_doc_line(s: &str) -> bool {
 /// check below accepts a block as doc only when the byte after `/**` is not a
 /// `*` and not `/`, which agrees with the spec for every shape that appears
 /// in normal source.
-fn is_doc_block(s: &str) -> bool {
-    if s.starts_with("/*!") {
+fn is_doc_block(slice: &str) -> bool {
+    if slice.starts_with("/*!") {
         return true;
     }
-    let Some(rest) = s.strip_prefix("/**") else {
+    let Some(rest) = slice.strip_prefix("/**") else {
         return false;
     };
     !(rest.is_empty() || rest.starts_with('*') || rest.starts_with('/'))
@@ -119,15 +119,15 @@ fn is_doc_block(s: &str) -> bool {
 
 fn has_allowed_prefix(line_comment: &str) -> bool {
     let body = line_comment.trim_start_matches('/').trim_start();
-    ALLOWED_PREFIXES.iter().any(|p| body.starts_with(p))
+    ALLOWED_PREFIXES.iter().any(|prefix| body.starts_with(prefix))
 }
 
-fn snippet(s: &str) -> String {
-    let s = s.trim();
-    if s.len() > 80 {
-        format!("{}...", &s[..80])
+fn snippet(slice: &str) -> String {
+    let trimmed = slice.trim();
+    if trimmed.len() > 80 {
+        format!("{}...", &trimmed[..80])
     } else {
-        s.to_owned()
+        trimmed.to_owned()
     }
 }
 
