@@ -22,7 +22,6 @@ clap = { workspace = true }
 [dev-dependencies]
 snapbox = { workspace = true }
 assert_fs = { workspace = true }
-tempfile = { workspace = true }
 
 [lints]
 workspace = true
