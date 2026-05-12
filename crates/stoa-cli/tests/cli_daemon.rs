@@ -30,7 +30,7 @@ fn daemon_once_drains_one_queued_event() {
     let raw = ws.path().join("raw.jsonl");
     write_file(&ws, "raw.jsonl", "{\"role\":\"user\",\"text\":\"hi\"}\n");
     // NOTE: enqueue directly via stoa-queue; the daemon subcommand opens
-    // `.stoa/queue.db` under the workspace root.
+    // NOTE: `.stoa/queue.db` under the workspace root.
     let q = stoa_queue::Queue::open(&ws.path().join(".stoa/queue.db")).unwrap();
     q.insert(
         "agent.session.ended",
@@ -55,5 +55,5 @@ fn daemon_once_drains_one_queued_event() {
 fn daemon_outside_workspace_exits_non_zero() {
     let ws = workspace();
     let out = stoa(&ws, &["daemon", "--once"]);
-    assert!(!out.status.success(), "daemon must require a workspace (no STOA.md)",);
+    assert!(!out.status.success(), "daemon must require a workspace (no STOA.md)");
 }

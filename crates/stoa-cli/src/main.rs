@@ -10,6 +10,8 @@ use clap::error::ErrorKind;
 
 mod catalog;
 mod cli;
+mod daemon;
+mod hook;
 mod init;
 mod page;
 mod read;

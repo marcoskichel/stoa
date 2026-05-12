@@ -36,5 +36,5 @@ fn hook_install_unknown_platform_exits_non_zero() {
     let ws = workspace();
     init(&ws);
     let out = stoa(&ws, &["hook", "install", "--platform", "not-real"]);
-    assert!(!out.status.success(), "unknown platform must error rather than silently noop",);
+    assert!(!out.status.success(), "unknown platform must error rather than silently noop");
 }
