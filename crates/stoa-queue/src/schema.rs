@@ -59,6 +59,13 @@ const ADD_ATTEMPTS_SQL: &str =
 /// `ADD COLUMN` for `error_kind`.
 const ADD_ERROR_KIND_SQL: &str = "ALTER TABLE queue_events ADD COLUMN error_kind TEXT;";
 
+/// Fast-path probe: returns true when `PRAGMA user_version` already
+/// matches [`USER_VERSION`]. Callers (the hook hot-path) skip the
+/// `CREATE TABLE IF NOT EXISTS` + index DDL when this is true.
+pub(crate) fn is_current(conn: &Connection) -> Result<bool> {
+    Ok(read_user_version(conn)? == USER_VERSION)
+}
+
 /// Apply the schema to a freshly opened `Connection`.
 ///
 /// Brings the DB forward from any prior `user_version` up to

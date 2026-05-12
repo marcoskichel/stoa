@@ -55,7 +55,7 @@ fn spawn_one(
     cfg: WorkerConfig,
 ) -> anyhow::Result<()> {
     let token = cancel.clone();
-    let queue = Arc::new(Queue::open(&cfg.queue_path).context("opening per-worker queue")?);
+    let queue = Arc::new(Queue::init(&cfg.queue_path).context("opening per-worker queue")?);
     tracker.spawn(async move { worker_loop(queue, cfg, token).await });
     Ok(())
 }

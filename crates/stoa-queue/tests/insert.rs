@@ -59,6 +59,29 @@ fn reopening_db_preserves_pending_rows() {
 }
 
 #[test]
+fn open_fast_path_works_after_init() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let path = tmp.path().join("queue.db");
+    {
+        let q = stoa_queue::Queue::init(&path).unwrap();
+        enqueue_session_ended(&q, "sess-fp-001").unwrap();
+    }
+    let q2 = stoa_queue::Queue::open(&path).unwrap();
+    assert_eq!(q2.pending_count().unwrap(), 1, "fast-path open must see prior inserts");
+    enqueue_session_ended(&q2, "sess-fp-002").unwrap();
+    assert_eq!(q2.pending_count().unwrap(), 2, "fast-path open must support inserts");
+}
+
+#[test]
+fn open_creates_db_first_run_when_no_file_exists() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let path = tmp.path().join("queue.db");
+    let q = stoa_queue::Queue::open(&path).unwrap();
+    enqueue_session_ended(&q, "sess-firstrun").unwrap();
+    assert_eq!(q.pending_count().unwrap(), 1);
+}
+
+#[test]
 fn pending_excludes_completed_rows() {
     let (_tmp, q) = fresh_queue();
     enqueue_session_ended(&q, "sess-001").unwrap();

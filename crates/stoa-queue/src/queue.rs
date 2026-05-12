@@ -45,12 +45,32 @@ pub struct FailureOutcome {
 }
 
 impl Queue {
-    /// Open (or create) the queue at `path`. Applies PRAGMAs + schema.
+    /// Open the queue at `path` on the fast path.
+    ///
+    /// Applies PRAGMAs, then reads `PRAGMA user_version`. If the DB is at
+    /// the current [`schema::USER_VERSION`] this returns without touching
+    /// the schema (the typical case for hooks). For new / migrating DBs
+    /// the full [`schema::apply`] runs as a fallback so first-run callers
+    /// (tests, fresh installs) are unaffected.
+    ///
+    /// Long-running callers (the daemon) should prefer [`Queue::init`]
+    /// which is explicit about taking the schema path.
     pub fn open(path: &Path) -> Result<Self> {
-        let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
-            | OpenFlags::SQLITE_OPEN_CREATE
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-        let conn = Connection::open_with_flags(path, flags)?;
+        let conn = open_connection(path)?;
+        pragma::apply(&conn)?;
+        if !schema::is_current(&conn)? {
+            schema::apply(&conn)?;
+        }
+        Ok(Self { conn: Mutex::new(conn) })
+    }
+
+    /// Open (or create) the queue at `path` and force a schema sync.
+    ///
+    /// Equivalent to [`Queue::open`] but always runs
+    /// `CREATE TABLE IF NOT EXISTS` + index DDL + the migration sequence
+    /// up to [`schema::USER_VERSION`]. Use this on daemon startup.
+    pub fn init(path: &Path) -> Result<Self> {
+        let conn = open_connection(path)?;
         pragma::apply(&conn)?;
         schema::apply(&conn)?;
         Ok(Self { conn: Mutex::new(conn) })
@@ -170,6 +190,14 @@ impl Queue {
     pub fn pragma_busy_timeout(&self) -> Result<i64> {
         with_conn(&self.conn, pragma::busy_timeout)
     }
+}
+
+fn open_connection(path: &Path) -> Result<Connection> {
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+        | OpenFlags::SQLITE_OPEN_CREATE
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let conn = Connection::open_with_flags(path, flags)?;
+    Ok(conn)
 }
 
 /// Run `f` while holding the connection lock; drop the guard before returning
