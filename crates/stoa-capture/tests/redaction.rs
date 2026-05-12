@@ -109,6 +109,59 @@ fn redacts_aws_credentials_path() {
 }
 
 #[test]
+fn redacts_ssh_path_in_tilde_home() {
+    let r = default_redactor();
+    let out = r.redact_line("see ~/.ssh/id_rsa for the key");
+    assert!(
+        has_redaction_kind(&out, "path-ssh"),
+        "tilde-home SSH path not redacted: {out:?}",
+    );
+    assert!(!out.contains("~/.ssh/id_rsa"));
+}
+
+#[test]
+fn redacts_aws_path_in_tilde_home() {
+    let r = default_redactor();
+    let out = r.redact_line("creds at ~/.aws/credentials");
+    assert!(
+        has_redaction_kind(&out, "path-aws"),
+        "tilde-home AWS path not redacted: {out:?}",
+    );
+}
+
+#[test]
+fn redacts_ghr_refresh_token() {
+    let r = default_redactor();
+    let key = format!("ghr_{}", "a".repeat(40));
+    let out = r.redact_line(&format!("refresh: {key}"));
+    assert!(
+        has_redaction_kind(&out, "github-refresh"),
+        "ghr_ token not redacted: {out:?}",
+    );
+    assert!(!out.contains(&key));
+}
+
+#[test]
+fn rejects_openai_none_permissive_variant() {
+    let r = default_redactor();
+    let out = r.redact_line("token: sk-None-abcdefghijklmnopqrstuvwxyz0123456789");
+    assert!(
+        !has_redaction_kind(&out, "openai"),
+        "non-canonical openai prefix must not match: {out:?}",
+    );
+}
+
+#[test]
+fn redacts_openai_svcacct_admin_prefixes() {
+    let r = default_redactor();
+    let svc = "sk-svcacct-abcdefghijklmnopqrstuvwxyz0123456789";
+    let adm = "sk-admin-abcdefghijklmnopqrstuvwxyz0123456789";
+    let out = r.redact_line(&format!("{svc} {adm}"));
+    assert!(!out.contains(svc), "svcacct must be redacted: {out:?}");
+    assert!(!out.contains(adm), "admin must be redacted: {out:?}");
+}
+
+#[test]
 fn preserves_non_secret_alphanum_strings() {
     let r = default_redactor();
     let out = r.redact_line("commit: 1a2b3c4d5e6f7890abcdef1234567890");

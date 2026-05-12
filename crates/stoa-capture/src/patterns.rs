@@ -42,7 +42,7 @@ pub(crate) const DEFAULTS: &[Pattern] = &[
     },
     Pattern {
         kind: "github-refresh",
-        regex: r"\bghr_[A-Za-z0-9]{76}\b",
+        regex: r"\bghr_[A-Za-z0-9]{36,}\b",
     },
     Pattern {
         kind: "gitlab",
@@ -70,7 +70,7 @@ pub(crate) const DEFAULTS: &[Pattern] = &[
     },
     Pattern {
         kind: "openai",
-        regex: r"\bsk-(?:proj|svcacct|admin|None)?-?[A-Za-z0-9_\-]{20,200}\b",
+        regex: r"\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_\-]{20,200}\b",
     },
     Pattern {
         kind: "bearer",
@@ -82,14 +82,14 @@ pub(crate) const DEFAULTS: &[Pattern] = &[
     },
     Pattern {
         kind: "path-ssh",
-        regex: r#"[A-Za-z]?[/\\][^\s"',]*[/\\]\.ssh(?:[/\\][^\s"',]+)?"#,
+        regex: r#"(?:[A-Za-z]?[/\\][^\s"',]*[/\\]|~[/\\])\.ssh(?:[/\\][^\s"',]+)?"#,
     },
     Pattern {
         kind: "path-aws",
-        regex: r#"[A-Za-z]?[/\\][^\s"',]*[/\\]\.aws(?:[/\\][^\s"',]+)?"#,
+        regex: r#"(?:[A-Za-z]?[/\\][^\s"',]*[/\\]|~[/\\])\.aws(?:[/\\][^\s"',]+)?"#,
     },
     Pattern {
         kind: "path-gnupg",
-        regex: r#"[A-Za-z]?[/\\][^\s"',]*[/\\]\.gnupg(?:[/\\][^\s"',]+)?"#,
+        regex: r#"(?:[A-Za-z]?[/\\][^\s"',]*[/\\]|~[/\\])\.gnupg(?:[/\\][^\s"',]+)?"#,
     },
 ];
