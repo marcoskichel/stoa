@@ -2,9 +2,19 @@
 
 ## Quick start
 
+Fresh clone (assumes `rustup` + `uv` already installed):
+
 ```bash
-just install-dev              # cargo install stoa-cli + uv sync python sidecar
+./scripts/bootstrap.sh        # installs dev tools + builds both workspaces
 just ci                       # full local gate (lint + test + supply chain)
+```
+
+Once dev tools are present, day-to-day:
+
+```bash
+just install-dev              # cargo install stoa-cli + uv sync sidecar
+just dev                      # interactive Rust dev loop (bacon)
+just watch                    # cross-language lint+test on save
 ```
 
 ## Layout

@@ -80,6 +80,13 @@ bench:
 # Install for local dev
 # --------------------------------------------------------------------------
 
+# Full dev environment bootstrap (idempotent).
+# Installs dev tools + builds workspaces. Requires rustup + uv on PATH.
+install:
+    ./scripts/bootstrap.sh
+
+# Install stoa CLI to ~/.cargo/bin + sync Python sidecar. Assumes dev tools
+# already present (run `just install` first on a fresh clone).
 install-dev:
     cargo install --path crates/stoa-cli --locked
     cd python && uv sync --all-groups
