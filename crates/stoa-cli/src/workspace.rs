@@ -4,9 +4,11 @@
 //! CLI walks up from the current working directory to find one; `init` is
 //! the only command that creates one from scratch.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow};
+use stoa_core::Schema;
 
 /// Marker file. Presence at a directory root means "this is a stoa workspace".
 pub(crate) const STOA_MD: &str = "STOA.md";
@@ -64,11 +66,22 @@ impl Workspace {
     }
 
     /// Resolve the on-disk path for a page id (e.g. `ent-redis` →
-    /// `wiki/entities/ent-redis.md`). Returns an error if the prefix is
-    /// unknown.
+    /// `wiki/entities/ent-redis.md`). Returns an error if the id fails the
+    /// slug grammar enforced by [`stoa_core::Id::parse`].
     pub(crate) fn page_path(&self, id: &str) -> anyhow::Result<PathBuf> {
-        let parsed = stoa_core::Id::parse(id)
-            .ok_or_else(|| anyhow!("unknown id prefix in `{id}` (expected ent-/con-/syn-)"))?;
+        let parsed = stoa_core::Id::parse(id).ok_or_else(|| {
+            anyhow!(
+                "invalid id `{id}` — expected `(ent|con|syn)-<slug>` where \
+                 <slug> is `[a-z0-9]+(-[a-z0-9]+)*`, length <= 128"
+            )
+        })?;
         Ok(self.wiki_subdir(parsed.dir).join(format!("{id}.md")))
+    }
+
+    /// Load the workspace [`Schema`] from `STOA.md`.
+    pub(crate) fn schema(&self) -> anyhow::Result<Schema> {
+        let text = fs::read_to_string(self.stoa_md())
+            .with_context(|| format!("reading `{}`", self.stoa_md().display()))?;
+        Ok(Schema::from_stoa_md(&text))
     }
 }

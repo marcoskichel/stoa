@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_yaml::{Mapping, Value};
+use stoa_core::{Schema, validate_page};
 
 use crate::catalog;
 use crate::page::{render_page, split_page};
@@ -22,14 +23,29 @@ pub(crate) fn run(
 ) -> anyhow::Result<()> {
     let ws = Workspace::current()?;
     let page_path = ws.page_path(id)?;
+    let schema = ws.schema()?;
     let now = Utc::now();
     let existing = read_existing(&page_path)?;
     let frontmatter = build_frontmatter(id, &existing, fm_path, now)?;
+    validate_frontmatter(&frontmatter, id, &schema)?;
     let body = resolve_body(&existing, body_path)?;
     write_page(&page_path, &frontmatter, &body)?;
     append_log(&ws, id, now)?;
     catalog::refresh_index(&ws)?;
     Ok(())
+}
+
+/// Refuse to persist a page that would fail `stoa schema --check`.
+///
+/// Catches missing required fields, unknown `kind`/`status`/`type`, and
+/// unknown relationship types — before the bad page lands on disk.
+fn validate_frontmatter(yaml: &str, id: &str, schema: &Schema) -> anyhow::Result<()> {
+    let errors = validate_page(yaml, id, schema);
+    if errors.is_empty() {
+        return Ok(());
+    }
+    let joined = errors.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n");
+    Err(anyhow!("frontmatter invalid for `{id}`:\n{joined}"))
 }
 
 struct Existing {

@@ -9,6 +9,7 @@ use stoa_core::{Schema, ValidationError};
 use crate::page::split_page;
 use crate::workspace::Workspace;
 
+
 /// Run `stoa schema` (`check=false`) or `stoa schema --check`.
 pub(crate) fn run(check: bool) -> anyhow::Result<()> {
     let ws = Workspace::current()?;
@@ -27,7 +28,7 @@ fn run_print(ws: &Workspace) -> anyhow::Result<()> {
 }
 
 fn run_check(ws: &Workspace) -> anyhow::Result<()> {
-    let schema = load_schema(ws)?;
+    let schema = ws.schema()?;
     let mut errors: Vec<ValidationError> = Vec::new();
     for dir in stoa_core::PageDir::all() {
         let sub = ws.wiki_subdir(dir);
@@ -45,12 +46,6 @@ fn run_check(ws: &Workspace) -> anyhow::Result<()> {
         .collect::<Vec<_>>()
         .join("\n");
     Err(anyhow!("schema check failed:\n{joined}"))
-}
-
-fn load_schema(ws: &Workspace) -> anyhow::Result<Schema> {
-    let text = fs::read_to_string(ws.stoa_md())
-        .with_context(|| format!("reading `{}`", ws.stoa_md().display()))?;
-    Ok(Schema::from_stoa_md(&text))
 }
 
 fn collect_errors_in(
