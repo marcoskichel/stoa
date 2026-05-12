@@ -197,6 +197,46 @@ fn worker_dead_letters_poison_payload_after_max_attempts() {
     assert_eq!(q.failed_count().unwrap(), 1, "poison row must be dead-lettered");
 }
 
+#[cfg(unix)]
+#[test]
+fn worker_refuses_to_follow_audit_log_symlink() {
+    let (tmp, cfg) = workspace();
+    let target = tmp.path().join("not-audit.log");
+    fs::write(&target, b"").unwrap();
+    std::os::unix::fs::symlink(&target, &cfg.audit_log).unwrap();
+    let raw = tmp.path().join("raw.jsonl");
+    write_session_file(&raw, &[r#"{"role":"user","text":"hi"}"#]);
+    enqueue_capture(&cfg, "sess-auditlink", &raw);
+    for _ in 0..6 {
+        let _ignored = stoa_capture::drain_once(&cfg);
+    }
+    let body = fs::read_to_string(&target).unwrap();
+    assert!(
+        body.is_empty(),
+        "symlink target must remain untouched: {body:?}",
+    );
+    let q = Queue::open(&cfg.queue_path).unwrap();
+    assert_eq!(q.failed_count().unwrap(), 1, "symlinked audit log must dead-letter");
+}
+
+#[cfg(unix)]
+#[test]
+fn worker_refuses_to_write_through_session_output_symlink() {
+    let (tmp, cfg) = workspace();
+    let raw = tmp.path().join("raw.jsonl");
+    write_session_file(&raw, &[r#"{"role":"user","text":"hi"}"#]);
+    let evil = tmp.path().join("evil-target.jsonl");
+    fs::write(&evil, b"").unwrap();
+    let out = cfg.sessions_dir.join("sess-outlink.jsonl");
+    std::os::unix::fs::symlink(&evil, &out).unwrap();
+    enqueue_capture(&cfg, "sess-outlink", &raw);
+    for _ in 0..6 {
+        let _ignored = stoa_capture::drain_once(&cfg);
+    }
+    let body = fs::read_to_string(&evil).unwrap();
+    assert!(body.is_empty(), "symlink target must not be overwritten: {body:?}");
+}
+
 #[test]
 fn worker_outputs_one_jsonl_line_per_input_line() {
     let (tmp, cfg) = workspace();

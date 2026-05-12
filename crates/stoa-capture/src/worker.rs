@@ -190,11 +190,7 @@ fn redact_to_disk(source: &Path, dest: &Path) -> Result<()> {
     let redactor = Redactor::with_defaults();
     let input = File::open(source)?;
     let reader = BufReader::new(input);
-    let output = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(dest)?;
+    let output = open_dest_safely(dest)?;
     let mut writer = BufWriter::new(output);
     for line in reader.lines() {
         let line = line?;
@@ -204,6 +200,30 @@ fn redact_to_disk(source: &Path, dest: &Path) -> Result<()> {
     }
     writer.flush()?;
     Ok(())
+}
+
+/// Open the redacted-output file, refusing to write through a symlink.
+///
+/// First try `File::create_new` so we win the create race against any
+/// attacker pre-seeding the path. On `ErrorKind::AlreadyExists` (a
+/// re-capture, the idempotency case) verify the existing path is a
+/// regular file — not a symlink, not a directory — before opening
+/// `truncate=true` for overwrite.
+fn open_dest_safely(dest: &Path) -> Result<File> {
+    match OpenOptions::new().write(true).create_new(true).open(dest) {
+        Ok(f) => Ok(f),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            let meta = fs::symlink_metadata(dest)?;
+            if !meta.file_type().is_file() {
+                return Err(Error::PayloadRejected(
+                    "output path exists but is not a regular file",
+                ));
+            }
+            let f = OpenOptions::new().write(true).truncate(true).open(dest)?;
+            Ok(f)
+        },
+        Err(e) => Err(Error::Io(e)),
+    }
 }
 
 fn worker_id() -> String {
