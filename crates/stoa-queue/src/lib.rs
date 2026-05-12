@@ -18,4 +18,4 @@ mod schema;
 
 pub use claim::ClaimedRow;
 pub use error::{Error, Result};
-pub use queue::{Queue, Row};
+pub use queue::{FailureOutcome, Queue, Row};

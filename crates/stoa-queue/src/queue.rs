@@ -35,6 +35,15 @@ pub struct Row {
     pub payload: String,
 }
 
+/// Outcome of [`Queue::record_failure`].
+#[derive(Debug, Clone, Copy)]
+pub struct FailureOutcome {
+    /// True if the row was moved to `status='failed'` (max attempts hit).
+    pub dead_lettered: bool,
+    /// Updated `attempts` count for the row.
+    pub attempts: i64,
+}
+
 impl Queue {
     /// Open (or create) the queue at `path`. Applies PRAGMAs + schema.
     pub fn open(path: &Path) -> Result<Self> {
@@ -75,10 +84,42 @@ impl Queue {
         })
     }
 
-    /// Count rows whose status != 'done'.
+    /// Record a failed processing attempt for row `id`.
+    ///
+    /// Increments `attempts` by 1. If the new `attempts` reaches
+    /// `max_attempts`, the row is dead-lettered (`status='failed'`,
+    /// `error_kind` set). Otherwise the row is released back to `pending`
+    /// so the next worker tick can re-claim it.
+    pub fn record_failure(
+        &self,
+        id: i64,
+        error_kind: &str,
+        max_attempts: i64,
+    ) -> Result<FailureOutcome> {
+        with_conn(&self.conn, |c| {
+            let mut stmt = c.prepare(RECORD_FAILURE_SQL)?;
+            let row = stmt.query_row(params![max_attempts, error_kind, id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?;
+            Ok(FailureOutcome {
+                dead_lettered: row.0 == "failed",
+                attempts: row.1,
+            })
+        })
+    }
+
+    /// Count rows whose status is `'pending'` or `'claimed'` (i.e. live work).
     pub fn pending_count(&self) -> Result<u64> {
         with_conn(&self.conn, |c| {
             let n: i64 = c.query_row(PENDING_COUNT_SQL, [], |r| r.get(0))?;
+            Ok(u64::try_from(n).unwrap_or(0))
+        })
+    }
+
+    /// Count rows whose status is `'failed'` (dead-lettered).
+    pub fn failed_count(&self) -> Result<u64> {
+        with_conn(&self.conn, |c| {
+            let n: i64 = c.query_row(FAILED_COUNT_SQL, [], |r| r.get(0))?;
             Ok(u64::try_from(n).unwrap_or(0))
         })
     }
@@ -150,11 +191,31 @@ INSERT OR IGNORE INTO queue_events \
 
 const COMPLETE_SQL: &str = "UPDATE queue_events SET status='done' WHERE id=?1;";
 
-const PENDING_COUNT_SQL: &str = "SELECT COUNT(*) FROM queue_events WHERE status != 'done';";
+/// Atomic failure-record statement.
+///
+/// `?1` = `max_attempts`, `?2` = `error_kind`, `?3` = row id. Increments
+/// `attempts` by 1; if the new value reaches `max_attempts` the row is
+/// dead-lettered (`status='failed'`, `error_kind` set), otherwise it is
+/// released back to `pending` so the next claim picks it up.
+const RECORD_FAILURE_SQL: &str = "\
+UPDATE queue_events \
+   SET attempts = attempts + 1, \
+       status = CASE WHEN attempts + 1 >= ?1 THEN 'failed' ELSE 'pending' END, \
+       error_kind = CASE WHEN attempts + 1 >= ?1 THEN ?2 ELSE error_kind END, \
+       claimed_by = NULL, \
+       claimed_at = NULL, \
+       lease_expires = NULL \
+ WHERE id = ?3 \
+RETURNING status, attempts;";
+
+const PENDING_COUNT_SQL: &str =
+    "SELECT COUNT(*) FROM queue_events WHERE status IN ('pending', 'claimed');";
+
+const FAILED_COUNT_SQL: &str = "SELECT COUNT(*) FROM queue_events WHERE status = 'failed';";
 
 const PEEK_SQL: &str = "\
 SELECT id, session_id, event, payload \
   FROM queue_events \
- WHERE status != 'done' \
+ WHERE status IN ('pending', 'claimed') \
  ORDER BY id ASC \
  LIMIT 1;";

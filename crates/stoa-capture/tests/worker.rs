@@ -142,6 +142,22 @@ fn worker_returns_none_on_empty_queue() {
 }
 
 #[test]
+fn worker_dead_letters_poison_payload_after_max_attempts() {
+    let (tmp, cfg) = workspace();
+    let missing = tmp.path().join("does-not-exist.jsonl");
+    enqueue_capture(&cfg, "sess-poison", &missing);
+    for _ in 0..6 {
+        let outcome = stoa_capture::drain_once(&cfg);
+        if outcome.is_ok() {
+            break;
+        }
+    }
+    let q = Queue::open(&cfg.queue_path).unwrap();
+    assert_eq!(q.pending_count().unwrap(), 0, "poison row must not stay claimed");
+    assert_eq!(q.failed_count().unwrap(), 1, "poison row must be dead-lettered");
+}
+
+#[test]
 fn worker_outputs_one_jsonl_line_per_input_line() {
     let (tmp, cfg) = workspace();
     let raw = tmp.path().join("raw.jsonl");

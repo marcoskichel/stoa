@@ -25,6 +25,14 @@ const DEFAULT_LEASE_SECS: i64 = 60;
 /// Worker identifier prefix; per-process id is appended at runtime.
 const WORKER_PREFIX: &str = "stoa-capture";
 
+/// Max processing attempts before a row is dead-lettered (`status='failed'`).
+///
+/// On every `process()` error the worker increments the row's `attempts`
+/// column and releases it back to `pending`; once the count hits this
+/// ceiling the row is moved to `failed` with `error_kind` set so the next
+/// claim cycle skips it instead of looping forever.
+const MAX_ATTEMPTS: i64 = 5;
+
 /// Paths the worker needs to do its job.
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
@@ -56,19 +64,52 @@ struct Payload {
 }
 
 /// Drain one queue row. Returns `None` on an empty queue.
+///
+/// On `process()` error the row's `attempts` column is incremented and the
+/// row is released back to `pending`. Once `attempts` reaches
+/// [`MAX_ATTEMPTS`] the row is dead-lettered (`status='failed'`,
+/// `error_kind` recorded) so the worker stops looping on poison payloads.
 pub fn drain_once(cfg: &WorkerConfig) -> Result<Option<DrainResult>> {
     let q = Queue::open(&cfg.queue_path)?;
     let Some(claim) = q.claim(&worker_id(), DEFAULT_LEASE_SECS)? else {
         return Ok(None);
     };
-    let outcome = process(cfg, &claim);
-    match outcome {
+    match process(cfg, &claim) {
         Ok(result) => {
             q.complete(claim.id)?;
             Ok(Some(result))
         },
-        Err(e) => Err(e),
+        Err(e) => {
+            handle_failure(&q, &claim, &e)?;
+            Err(e)
+        },
     }
+}
+
+fn handle_failure(q: &Queue, claim: &ClaimedRow, err: &Error) -> Result<()> {
+    let kind = err.classify();
+    let outcome = q.record_failure(claim.id, kind, MAX_ATTEMPTS)?;
+    if outcome.dead_lettered {
+        tracing::error!(
+            row_id = claim.id,
+            session_id = %claim.session_id,
+            attempts = outcome.attempts,
+            error_kind = kind,
+            error = %err,
+            "capture worker dead-lettered poison row",
+        );
+    } else {
+        tracing::error!(
+            row_id = claim.id,
+            session_id = %claim.session_id,
+            attempts = outcome.attempts,
+            max_attempts = MAX_ATTEMPTS,
+            error_kind = kind,
+            error = %err,
+            "capture worker released row for retry",
+        );
+    }
+    Ok(())
 }
 
 fn process(cfg: &WorkerConfig, claim: &ClaimedRow) -> Result<DrainResult> {
