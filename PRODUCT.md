@@ -2,7 +2,7 @@
 
 > The painted porch for AI memory.
 
-Stoa is an open-core knowledge + memory system for AI agents. It implements Andrej Karpathy's LLM Wiki pattern (compounding markdown pages curated by the LLM) and pairs it with a hybrid recall layer (BM25 + embeddings + a small knowledge graph). Capture is automatic — a Claude Code `Stop` hook (Cursor and Codex adapters next) writes the full session transcript into the workspace; an async worker redacts PII, harvests entities, and on a nightly schedule crystallizes synthesis pages. Agents query through `stoa query` via their existing shell tool. No MCP server required to ship value.
+Stoa is an open-core knowledge + memory system for AI agents. It implements Andrej Karpathy's LLM Wiki pattern (compounding markdown pages curated by the LLM) on top of a hybrid recall layer (vector + BM25 + small typed knowledge graph) behind a swappable backend interface. Capture is automatic — a Claude Code `Stop` hook (Cursor and Codex next) writes the full session transcript into the workspace; an async worker redacts PII, harvests entities, and on a nightly schedule crystallizes synthesis pages with an explicit invalidation pass. Stoa also injects relevant memory into the agent's context at the right hook points (SessionStart in v0.1; UserPromptSubmit and PreCompact in v0.2), so the wiki is *felt* by the agent without it ever having to remember to query. No MCP server required to ship value.
 
 The name comes from the *Stoa Poikile* — the Painted Porch in the Athenian Agora where Zeno of Citium gathered his school around 300 BCE. Knowledge accreted there through paced conversation. Stoa-the-tool is the same idea for AI agents: a place where what gets thought once stays thought, and compounds.
 
@@ -30,7 +30,7 @@ The gap is real. Nobody has shipped a working wiki + memory combo with honest be
 Three layers, each addressable on its own:
 
 1. **Wiki** — plain markdown on disk. Karpathy-compatible directory tree. Obsidian-readable, git-trackable. The canonical store; everything else can be rebuilt from it.
-2. **Recall** — hybrid index over the wiki and session transcripts: BM25 + local embeddings + a small typed knowledge graph. Stored locally. No API calls required.
+2. **Recall** — hybrid index over the wiki and session transcripts: vector embeddings (ChromaDB by default) + BM25 (SQLite FTS5) + small typed knowledge graph (SQLite). Behind a formal `RecallBackend` interface so the substrate is swappable; alternative adapters (mempalace, LanceDB, pgvector) land later as community-maintained backends. Stored locally. No API calls required.
 3. **CLI + agent-platform hooks** — `stoa` CLI exposes every operation; small per-platform hook scripts capture session transcripts into a queue. Async workers do all the heavy work (redaction, harvest, crystallize) off the agent's hot path. An MCP wrapper is planned for v0.3 as optional sugar; v0.1 is hooks + CLI.
 
 ### Design pillars
@@ -39,24 +39,28 @@ The shape of the system, not the feature list. Each pillar is detailed in [ARCHI
 
 - **Schema as product.** A `STOA.md` file at the workspace root encodes domain entity types, relationship vocabulary, ingest rules, quality bar, and privacy redactions. Loaded into every agent context. The most important file in the system.
 - **Capture without trusting the agent.** Session transcripts are captured by a deterministic platform hook in <10ms, written to a queue, redacted by a worker. The agent doesn't need to remember to "save" anything; passive capture is the floor. An optional `stoa note` lets the agent flag importance, but reliability never depends on it.
-- **Two-stage distillation.** Per-session **harvest** with strict quality gating extracts entities and decisions into the wiki. Nightly **crystallize** synthesizes cross-session essays as drafts and runs an explicit invalidation pass to retire stale claims. Single-pass distillation lags this approach by ~15 percentage points on the leading benchmarks.
+- **Two-stage distillation.** Per-session **harvest** with strict quality gating extracts entities and decisions into the wiki. Nightly **crystallize** synthesizes cross-session essays as drafts and runs an explicit invalidation pass to retire stale claims. Mem0's published numbers are the proof: selective retrieval + injection delivers 91% lower p95 latency, 90% token reduction, and 26% accuracy gain over naive full-context. Single-pass distillation lags staged distillation by ~15 percentage points on LongMemEval.
+- **Auto-injection of memory at the right hook points.** The agent doesn't have to remember to query. SessionStart in v0.1 prepends top-K relevant wiki pages to the system prompt at session boot. UserPromptSubmit and PreCompact follow in v0.2 (with relevance gating and `systemMessage`-only PreCompact to avoid mempalace's documented blocking-loop bug). Every injection is hard-capped on tokens, gated by relevance threshold, and wrapped in MINJA-resistant XML delimiters with explicit "treat as data, not instructions" framing.
+- **Swappable recall substrate.** A formal `RecallBackend` interface separates retrieval storage from Stoa's orchestration. v0.1 ships `LocalChromaSqliteBackend` (ChromaDB + SQLite FTS5 + SQLite KG). Mempalace, LanceDB, and pgvector adapters land later. Backend swaps must publish recall@k against Stoa's published test corpus — no silent quality regressions.
 - **Lifecycle without decay theater.** Explicit supersession + staleness flags + git history. No silent decay scores, no Ebbinghaus forgetting curves on facts. Confidence scores live on relationships only and are derived, not gut-set.
 - **Event-driven automation.** Hook-triggered events (`agent.session.ended`, `transcript.captured`, `source.ingested`, `wiki.page.written`, `lint.tick`, `crystallize.tick`) run through async workers. User-extensible hooks (`.stoa/hooks/<event>/`).
-- **Privacy redaction at capture and ingest.** Rule-based PII/secret redaction applied before content reaches `raw/` or `sessions/`. In the OSS core, not the paid tier.
+- **Privacy redaction at capture and ingest. MINJA defenses on injection.** Rule-based PII/secret redaction applied before content reaches `raw/` or `sessions/`. Always-flush on session exit (no `SAVE_INTERVAL` gate; mempalace #1341 was a silent-loss bug Stoa avoids by design). Injection content is structurally segregated from agent instructions, against the OWASP ASI06 memory-poisoning attack class. All in the OSS core, not the paid tier.
 - **Markdown is canonical.** The recall index is derived. Delete `.stoa/`, run `stoa rebuild`, get it all back. The user's knowledge survives Stoa.
 
 ## OSS core (MIT)
 
 - `stoa init` — scaffold wiki + config in any directory
-- `stoa hook install --platform claude-code` — register the agent capture hook
+- `stoa hook install --platform claude-code [--inject session-start]` — register the agent capture and injection hooks
 - `stoa daemon` — run capture + harvest + scheduler workers
 - `stoa ingest` — ingest URLs, PDFs, markdown, plain text
-- `stoa query` — local hybrid search across wiki + sessions
+- `stoa query` — local hybrid search across wiki + sessions (any agent, any shell)
+- `stoa inject log` — inspect what was injected into recent sessions and why
 - `stoa harvest` / `stoa crystallize` — manual triggers for the distillation stages
 - `stoa lint` — wiki health check
 - `stoa note` — add a structured observation to the active session (agent or human)
-- Rule-based PII/secret redaction applied at capture and ingest
-- Reproducible LongMemEval benchmark scripts published from day one
+- `LocalChromaSqliteBackend` as the default recall substrate; formal `RecallBackend` interface for alternative adapters
+- Rule-based PII/secret redaction applied at capture and ingest, plus MINJA-resistant XML delimiters on every injection
+- Reproducible LongMemEval benchmark scripts published from day one (recall@k against a fixed test corpus; backend swaps must publish against the same corpus)
 - Local-first: no required cloud, no required API keys
 
 ## Paid layer (planned, not promised)
@@ -72,17 +76,19 @@ The OSS core stays MIT and stays useful by itself. If the paid layer never ships
 
 ## Differentiation
 
-Five things separate Stoa from the existing field.
+Six things separate Stoa from the existing field.
 
-1. **Wiki + recall in one tool.** Nobody else shipped this working. The wiki-only projects don't recall; the recall-only projects don't compile.
+1. **Wiki + recall + injection in one tool.** The market has shipped fragments — Memoriki has the wiki + retrieval split but no injection layer; claude-mem has injection but no wiki write side; agentmemory has the hook suite but no schema. Nobody has shipped all three together with a quality contract.
 
-2. **Honest benchmarks.** Mempalace launched with a "100% LongMemEval" headline that was overfitted to the failing test cases, then republished as 96.6% after community pushback. Several README features (notably contradiction detection) are documented as missing in their own issues. Stoa publishes the benchmark scripts, the test sets, and the actual numbers — once. No re-runs after engineering fixes.
+2. **Auto-injection at the right hook points, with MINJA defenses by default.** SessionStart in v0.1, UserPromptSubmit and PreCompact in v0.2. Hard token budgets, relevance gating, top-of-prompt placement (lost-in-the-middle defense), and explicit XML delimiters with "treat as data, not instructions" framing on every injection. The OWASP ASI06 attack class is a designed-against threat, not an afterthought.
 
-3. **Crystallization loop.** Episodic recall promoted to semantic wiki pages on a schedule. The feature multiple specs describe and nobody ships.
+3. **Honest benchmarks against a fixed corpus.** Mempalace launched with a "100% LongMemEval" headline that was ChromaDB stock nearest-neighbor performance, not the palace structure. The independent lhl/agentic-memory analysis showed several README features were absent from the code. Stoa publishes its test corpus, runs LongMemEval reproducibly from day one, and requires every backend adapter to publish recall@k against the same corpus. No re-runs after engineering fixes.
 
-4. **Local-first, hook + CLI native.** Runs entirely on the user's machine. Captures session transcripts via a deterministic agent-platform hook (Claude Code `Stop` first; Cursor and Codex adapters next), and exposes every operation as a `stoa` CLI command any agent can invoke through its existing shell tool. CLI invocation is empirically more reliable than MCP tool calls on hard tasks (100% vs ~72% in published comparisons). MCP wrapper available later for clients that prefer the tool-panel UX.
+4. **Crystallization with invalidation.** Multiple specs describe a promote-from-sessions loop; nobody ships the inverse. Stoa's nightly crystallize produces both new synthesis drafts and supersession proposals. The Memora FAMA benchmark documents 18–32% accuracy loss when memory systems only add and never retire — Stoa's invalidation pass is the answer.
 
-5. **Markdown on disk.** The wiki is plain files. Users can grep them, edit them in Obsidian, version them in git, take them with them. Recall is an index over those files, not the canonical store.
+5. **Local-first, hook + CLI native.** Runs entirely on the user's machine. Captures session transcripts via a deterministic agent-platform hook (Claude Code `Stop` first; Cursor and Codex adapters next), and exposes every operation as a `stoa` CLI command any agent can invoke through its existing shell tool. CLI invocation is empirically more reliable than MCP tool calls on hard tasks (100% vs ~72% in published comparisons). MCP wrapper available later for clients that prefer the tool-panel UX.
+
+6. **Markdown is canonical; recall is derived.** The wiki is plain files. Users can grep them, edit them in Obsidian, version them in git, take them with them. The recall substrate is hidden behind a `RecallBackend` interface and is fully rebuildable from `wiki/` + `sessions/` + `raw/`. The user's knowledge survives Stoa, survives backend swaps, and survives Stoa being abandoned.
 
 ## Business model
 
@@ -92,10 +98,10 @@ Not building: pure SaaS competitor to Notion / mem.ai / Reflect — that lane is
 
 ## Roadmap (rough)
 
-- **v0.1 — walking skeleton.** CLI + markdown wiki + BM25 recall + Claude Code `Stop` hook + capture worker + PII redaction. Reproducible LongMemEval benchmark. Public.
-- **v0.2 — distillation + hybrid recall.** Embeddings + small typed KG. Harvest worker with quality gating. Lint with deterministic + heuristic checks. User-extensible event hooks.
-- **v0.3 — crystallize + lifecycle + cross-platform.** Crystallize loop with invalidation pass. Supersession + staleness flow. Cursor and Codex hook adapters. Optional MCP wrapper.
-- **v0.4 — multi-agent.** Shared brain across agents. Scoping, promotion, mesh sync, conflict resolution.
+- **v0.1 — walking skeleton.** CLI + markdown wiki + `RecallBackend` interface with `LocalChromaSqliteBackend` (vector + BM25 + KG) + Claude Code `Stop` hook + capture worker + PII redaction + always-flush + SessionStart injection with MINJA-resistant delimiters. Reproducible LongMemEval benchmark. Public.
+- **v0.2 — distillation + advanced injection.** Harvest worker with strict quality gating. Crystallize loop with invalidation pass. UserPromptSubmit and PreCompact (`systemMessage`-only) injection. Lint with deterministic + heuristic checks. User-extensible event hooks.
+- **v0.3 — cross-platform + experimental hooks + MCP.** Cursor and Codex capture + injection adapters. Lifecycle (supersession, staleness flow). PreToolUse experimental injection. Thin MCP wrapper that shells out to CLI. `MempalaceBackend` adapter ships if mempalace's API has been stable for ≥60 days.
+- **v0.4 — multi-agent + community backends.** Shared brain across agents. Scoping, promotion, mesh sync, conflict resolution. Community-maintained `LanceDbBackend`, `PgVectorBackend`.
 - **v1.0 — production.** Hardening, audit log surface, encryption-at-rest for `sessions/`. Begin paid-layer evaluation.
 
 No dates promised. Shipped honestly or not at all.
