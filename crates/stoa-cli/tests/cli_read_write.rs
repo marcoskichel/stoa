@@ -97,8 +97,12 @@ fn write_assigns_id_from_cli_argument() {
     reason = "Test helper; structural failure (no frontmatter, no `updated:`) is a test bug."
 )]
 fn extract_updated(page: &str) -> String {
-    let after_open = page.strip_prefix("---\n").expect("page starts with frontmatter open");
-    let end = after_open.find("\n---").expect("page has frontmatter close");
+    let after_open = page
+        .strip_prefix("---\n")
+        .expect("page starts with frontmatter open");
+    let end = after_open
+        .find("\n---")
+        .expect("page has frontmatter close");
     let yaml = &after_open[..end];
     let value: serde_yaml::Value = serde_yaml::from_str(yaml).expect("frontmatter is valid YAML");
     value
@@ -133,7 +137,7 @@ fn write_appends_event_to_log_md() {
     init(&ws);
     let _out = write_entity(&ws, "ent-redis");
     let log = read_file(&ws, "wiki/log.md");
-    assert!(contains(&log, "ent-redis"), "log.md must record the new page id: {log}",);
+    assert!(contains(&log, "ent-redis"), "log.md must record the new page id: {log}");
 }
 
 #[test]

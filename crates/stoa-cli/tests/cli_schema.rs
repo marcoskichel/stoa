@@ -32,7 +32,7 @@ fn schema_check_passes_on_fresh_workspace() {
     let ws = workspace();
     init(&ws);
     let out = stoa(&ws, &["schema", "--check"]);
-    assert!(out.status.success(), "fresh workspace must pass schema check: {}", stderr(&out),);
+    assert!(out.status.success(), "fresh workspace must pass schema check: {}", stderr(&out));
 }
 
 #[test]

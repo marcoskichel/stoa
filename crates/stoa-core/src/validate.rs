@@ -97,7 +97,8 @@ fn relationship_errors(fm: &Frontmatter, pid: &str, schema: &Schema) -> Vec<Vali
     for rel in rels {
         if !schema.allows_relationship_type(rel.kind.as_str()) {
             let allowed = schema.relationship_types().join(", ");
-            let msg = format!("unknown relationship type `{}` (allowed: {allowed})", rel.kind.as_str());
+            let msg =
+                format!("unknown relationship type `{}` (allowed: {allowed})", rel.kind.as_str());
             errors.push(ValidationError::new(pid, "relationship.type", msg));
         }
     }

@@ -22,7 +22,7 @@ const ENTITIES: &[(&str, &str, &str, &str)] = &[
 ];
 
 fn write_one(ws: &TempDir, id: &str, title: &str, entity_type: &str, body: &str) {
-    let fm = format!("kind: entity\ntitle: {title}\ntype: {entity_type}\nstatus: active\n",);
+    let fm = format!("kind: entity\ntitle: {title}\ntype: {entity_type}\nstatus: active\n");
     write_file(ws, "tmp/fm.yaml", &fm);
     write_file(ws, "tmp/body.md", &format!("{body}\n"));
     let out = stoa(
@@ -36,7 +36,7 @@ fn write_one(ws: &TempDir, id: &str, title: &str, entity_type: &str, body: &str)
             "tmp/body.md",
         ],
     );
-    assert!(out.status.success(), "write `{id}` failed: {}", stderr(&out),);
+    assert!(out.status.success(), "write `{id}` failed: {}", stderr(&out));
 }
 
 fn assert_schema_passes(ws: &TempDir) {
@@ -68,7 +68,7 @@ fn break_one_page(ws: &TempDir) {
 
 fn assert_schema_rejects_broken(ws: &TempDir) {
     let fail = stoa(ws, &["schema", "--check"]);
-    assert!(!fail.status.success(), "schema check must reject `not-a-real-type`",);
+    assert!(!fail.status.success(), "schema check must reject `not-a-real-type`");
     let err = stderr(&fail);
     assert!(
         contains(&err, "ent-broken") || contains(&err, "not-a-real-type"),

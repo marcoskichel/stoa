@@ -31,7 +31,7 @@ impl Workspace {
             }
             here = dir.parent();
         }
-        Err(anyhow!("not in a Stoa workspace (no `{STOA_MD}` found from {})", cwd.display(),))
+        Err(anyhow!("not in a Stoa workspace (no `{STOA_MD}` found from {})", cwd.display()))
     }
 
     /// Locate the workspace from the current process cwd.

@@ -46,7 +46,7 @@ fn init_is_idempotent() {
         "second init must not error: {}",
         common::stderr(&second),
     );
-    assert!(exists(&ws, probe_rel), "idempotent init must not delete user content",);
+    assert!(exists(&ws, probe_rel), "idempotent init must not delete user content");
 }
 
 #[test]

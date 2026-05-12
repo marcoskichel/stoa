@@ -44,7 +44,11 @@ fn validate_frontmatter(yaml: &str, id: &str, schema: &Schema) -> anyhow::Result
     if errors.is_empty() {
         return Ok(());
     }
-    let joined = errors.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n");
+    let joined = errors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
     Err(anyhow!("frontmatter invalid for `{id}`:\n{joined}"))
 }
 

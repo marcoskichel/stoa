@@ -9,7 +9,6 @@ use stoa_core::{Schema, ValidationError};
 use crate::page::split_page;
 use crate::workspace::Workspace;
 
-
 /// Run `stoa schema` (`check=false`) or `stoa schema --check`.
 pub(crate) fn run(check: bool) -> anyhow::Result<()> {
     let ws = Workspace::current()?;

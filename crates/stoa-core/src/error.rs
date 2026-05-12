@@ -52,6 +52,6 @@ impl ValidationError {
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "page `{}` field `{}`: {}", self.page_id, self.field, self.message,)
+        write!(f, "page `{}` field `{}`: {}", self.page_id, self.field, self.message)
     }
 }

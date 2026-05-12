@@ -82,7 +82,8 @@ impl Id {
     }
 
     fn split_prefix(raw: &str) -> Option<(PageDir, &str)> {
-        raw.strip_prefix("ent-").map(|s| (PageDir::Entities, s))
+        raw.strip_prefix("ent-")
+            .map(|s| (PageDir::Entities, s))
             .or_else(|| raw.strip_prefix("con-").map(|s| (PageDir::Concepts, s)))
             .or_else(|| raw.strip_prefix("syn-").map(|s| (PageDir::Synthesis, s)))
     }
