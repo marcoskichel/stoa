@@ -141,6 +141,21 @@ impl Queue {
         })
     }
 
+    /// Run `PRAGMA wal_checkpoint(TRUNCATE)` to flush + truncate the WAL.
+    ///
+    /// `SQLite` checkpoints opportunistically but never truncates the WAL
+    /// on its own; long-running daemons should call this periodically (e.g.
+    /// after a stretch of idle backoff) to keep `.stoa/queue.db-wal` from
+    /// growing unbounded.
+    pub fn checkpoint(&self) -> Result<()> {
+        with_conn(&self.conn, |c| {
+            let mut stmt = c.prepare("PRAGMA wal_checkpoint(TRUNCATE);")?;
+            let _ignored: (i64, i64, i64) =
+                stmt.query_row([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            Ok(())
+        })
+    }
+
     /// `PRAGMA journal_mode` (lowercase string, e.g. `"wal"`).
     pub fn pragma_journal_mode(&self) -> Result<String> {
         with_conn(&self.conn, pragma::journal_mode)

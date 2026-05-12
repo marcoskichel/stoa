@@ -5,10 +5,12 @@
 //! token cancels on SIGINT / SIGTERM and the task tracker waits for every
 //! worker to finish its current row before exiting.
 
+use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Context;
 use stoa_capture::WorkerConfig;
+use stoa_queue::Queue;
 use tokio::runtime::Builder;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -19,6 +21,12 @@ const MIN_BACKOFF: Duration = Duration::from_millis(1);
 /// Maximum poll interval; backoff resets to `MIN_BACKOFF` whenever a row
 /// is found, so a busy queue never sleeps long.
 const MAX_BACKOFF: Duration = Duration::from_millis(500);
+
+/// Consecutive idle cycles at `MAX_BACKOFF` before the worker runs
+/// `PRAGMA wal_checkpoint(TRUNCATE)`. Tuned so a quiet queue truncates
+/// the WAL roughly every minute (~120 cycles × 500ms) without thrashing
+/// during bursty traffic.
+const IDLE_CYCLES_PER_CHECKPOINT: u32 = 120;
 
 /// Run the daemon loop blocking the current thread until SIGTERM/SIGINT.
 pub(crate) fn serve(cfg: WorkerConfig, workers: usize) -> anyhow::Result<()> {
@@ -48,10 +56,14 @@ fn spawn_one(tracker: &TaskTracker, cancel: &CancellationToken, cfg: WorkerConfi
 
 async fn worker_loop(cfg: WorkerConfig, cancel: CancellationToken) {
     let mut backoff = MIN_BACKOFF;
+    let mut idle_at_max: u32 = 0;
     while !cancel.is_cancelled() {
-        match tick_once(&cfg).await {
-            Ok(true) => backoff = MIN_BACKOFF,
-            _ => backoff = next_backoff(backoff),
+        if let Ok(true) = tick_once(&cfg).await {
+            backoff = MIN_BACKOFF;
+            idle_at_max = 0;
+        } else {
+            backoff = next_backoff(backoff);
+            idle_at_max = maybe_checkpoint(&cfg, backoff, idle_at_max).await;
         }
         if sleep_or_cancel(&cancel, backoff).await {
             return;
@@ -63,6 +75,28 @@ async fn tick_once(cfg: &WorkerConfig) -> anyhow::Result<bool> {
     let cfg = cfg.clone();
     let outcome = tokio::task::spawn_blocking(move || stoa_capture::drain_once(&cfg)).await??;
     Ok(outcome.is_some())
+}
+
+/// Increment the idle-at-max counter; once it crosses
+/// [`IDLE_CYCLES_PER_CHECKPOINT`], run a WAL truncate checkpoint and reset
+/// the counter. Failures are swallowed (best-effort) — a missed
+/// checkpoint just means the WAL keeps growing for one more cycle.
+async fn maybe_checkpoint(cfg: &WorkerConfig, backoff: Duration, idle: u32) -> u32 {
+    if backoff < MAX_BACKOFF {
+        return 0;
+    }
+    let next = idle.saturating_add(1);
+    if next < IDLE_CYCLES_PER_CHECKPOINT {
+        return next;
+    }
+    let path: PathBuf = cfg.queue_path.clone();
+    let _ignored = tokio::task::spawn_blocking(move || {
+        let q = Queue::open(&path)?;
+        q.checkpoint()?;
+        Ok::<(), stoa_queue::Error>(())
+    })
+    .await;
+    0
 }
 
 async fn sleep_or_cancel(cancel: &CancellationToken, dur: Duration) -> bool {

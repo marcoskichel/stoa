@@ -30,6 +30,26 @@ fn queue_busy_timeout_is_set() {
 }
 
 #[test]
+fn checkpoint_truncates_wal_file_to_near_zero() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let path = tmp.path().join("queue.db");
+    let q = stoa_queue::Queue::open(&path).unwrap();
+    for n in 0..200_i32 {
+        common::enqueue_session_ended(&q, &format!("sess-wal-{n}")).unwrap();
+    }
+    let wal_path = path.with_extension("db-wal");
+    let before = std::fs::metadata(&wal_path).map_or(0, |m| m.len());
+    assert!(before > 0, "WAL must have grown after 200 inserts; got {before}");
+    q.checkpoint().unwrap();
+    let after = std::fs::metadata(&wal_path).map_or(0, |m| m.len());
+    assert!(
+        after < before,
+        "WAL must shrink after checkpoint(TRUNCATE): before={before} after={after}",
+    );
+    assert!(after <= 4096, "WAL should be near-empty after truncate; got {after}");
+}
+
+#[test]
 fn second_connection_sees_first_connections_writes() {
     let tmp = assert_fs::TempDir::new().unwrap();
     let path = tmp.path().join("queue.db");
