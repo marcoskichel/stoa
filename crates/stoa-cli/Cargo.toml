@@ -16,7 +16,6 @@ path = "src/main.rs"
 clap = { workspace = true }
 stoa-core = { path = "../stoa-core", version = "0.1.0" }
 anyhow = { workspace = true }
-serde = { workspace = true }
 serde_yaml = { workspace = true }
 chrono = { workspace = true }
 
@@ -24,8 +23,6 @@ chrono = { workspace = true }
 snapbox = { workspace = true }
 trycmd = { workspace = true }
 assert_fs = { workspace = true }
-predicates = { workspace = true }
-tempfile = { workspace = true }
 
 [lints]
 workspace = true
