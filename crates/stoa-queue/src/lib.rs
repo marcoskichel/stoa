@@ -1,6 +1,4 @@
 //! Stoa `SQLite` queue (`rusqlite`, WAL, FTS5).
-//!
-//! M1 skeleton — concrete API lands in M3 (Capture pipeline).
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,4 @@
 //! Stoa visualization module + worker.
-//!
-//! M1 skeleton — concrete API lands in post-MVP visualization milestones.
 
 #[cfg(test)]
 mod tests {

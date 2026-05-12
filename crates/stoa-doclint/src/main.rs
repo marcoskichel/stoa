@@ -1,7 +1,19 @@
-//! `stoa-doclint` — flags `///` doc comments that restate the identifier.
+//! `stoa-doclint` — forbid non-doc comments outside an allowlist of intent
+//! prefixes.
 //!
-//! Heuristic-based, AST-only (no type info needed). See `lint.rs` for the rule.
-//! Exit code 0 if clean, 1 if any findings (suppress with `--warn-only`).
+//! Comments come in two roles:
+//!
+//! - **API documentation** — `///`, `//!`, `/** */`, `/*! */`. Always allowed.
+//!   These survive `rustdoc` and live on alongside the items they describe.
+//! - **Inline notes** — bare `//` and `/* */`. The lint forbids these unless
+//!   the line comment opens with an explicit intent prefix from
+//!   [`comments::ALLOWED_PREFIXES`]. The prefix forces the author to state
+//!   *why* the comment exists.
+//!
+//! Trade-off: `TODO:` is deliberately excluded — TODOs decay into lies; track
+//! them in the issue tracker so they have an owner and a state.
+//!
+//! Exit code is 0 if no findings, 1 otherwise. `--warn-only` always exits 0.
 
 #![expect(
     clippy::print_stdout,
@@ -15,7 +27,7 @@ use clap::Parser;
 
 mod lint;
 
-/// Flag doc comments that add no information beyond the identifier.
+/// Forbid non-doc comments outside the prefix allowlist.
 #[derive(Parser, Debug)]
 #[command(name = "stoa-doclint", version, about, long_about = None)]
 struct Cli {
@@ -38,7 +50,7 @@ fn main() -> ExitCode {
         println!("{f}");
     }
     if findings.is_empty() {
-        println!("OK: no trivial doc comments found in {} root(s).", roots.len());
+        println!("OK: no forbidden comments in {} root(s).", roots.len());
         ExitCode::SUCCESS
     } else if cli.warn_only {
         ExitCode::SUCCESS

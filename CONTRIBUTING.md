@@ -45,7 +45,8 @@ Highlights:
 - **Python**: full type coverage via `basedpyright --strict`; `Any` is an error, including the `reportAny` rule.
 - **Escape hatches**: use `#[expect(<lint>, reason = "...")]` in Rust and `# type: ignore[<rule>]` with explicit rule code in Python. Never bare `#[allow]` or `# noqa`.
 - Imports: `from __future__ import annotations` is required in every Python module.
-- **No trivial doc comments.** `just lint-docs` runs `stoa-doclint` (`crates/stoa-doclint`), a `syn`-based binary that flags `///` doc comments whose every meaningful word (after stopword + `env!`-context filler removal) already appears in the documented item's name. The rule is intentionally narrow — if it fires, the doc is restating the identifier; the right move is to delete it, not to soften the comment. Heuristic + fixtures are under `crates/stoa-doclint/`.
+- **Comment policy** (`just lint-docs`, runs `stoa-doclint`). Doc comments — `///`, `//!`, `/** */`, `/*! */` — are always allowed; they survive in `rustdoc`. Bare `//` comments are forbidden unless the line opens with one of six durable intent prefixes — `SAFETY:`, `FIXME:`, `HACK:`, `PERF:`, `NOTE:`, `WHY:`. `TODO:` is intentionally not an allowed prefix: track TODOs in the issue tracker so they have an owner. Non-doc `/* */` block comments are forbidden outright.
+- **Doc-comment content.** Doc comments describe how the thing works — invariants, edge cases, error conditions, non-obvious constraints, performance characteristics callers depend on. They are **not** a place for transient information: no milestone or roadmap pointers (`M1 skeleton — lands in M3`), no TODO lists, no implementation history, no authorship or dates. If the only thing a doc comment adds is the identifier rephrased in prose, delete it.
 
 ## Environment traps documented during M0 spike
 

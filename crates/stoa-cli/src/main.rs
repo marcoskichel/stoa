@@ -1,6 +1,4 @@
 //! Stoa CLI entry point.
-//!
-//! M1 skeleton — concrete commands land in M2 (Wiki + CLI core).
 
 use std::process::ExitCode;
 

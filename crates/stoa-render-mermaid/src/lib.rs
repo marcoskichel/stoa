@@ -1,6 +1,4 @@
 //! Stoa viz backend: Mermaid markdown renderer.
-//!
-//! M1 skeleton — concrete API lands in post-MVP visualization milestones.
 
 #[cfg(test)]
 mod tests {

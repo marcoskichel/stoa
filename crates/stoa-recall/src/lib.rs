@@ -1,6 +1,4 @@
 //! Stoa `RecallBackend` trait + reciprocal rank fusion.
-//!
-//! M1 skeleton — concrete API lands in M4 (Recall + `LocalChromaSqliteBackend`).
 
 #[cfg(test)]
 mod tests {

@@ -82,7 +82,22 @@ The lint configs are strict by design and CI runs `RUSTFLAGS="-D warnings"`. Rea
   - Function body ≤ **25 lines** — clippy `too_many_lines` (threshold in `clippy.toml`) + `scripts/check_lengths.py` for Python.
   - File ≤ **400 lines** — `scripts/check-file-length.sh` (Rust) + `scripts/check_lengths.py` (Python). Override via `LIMIT=` env var if absolutely necessary.
 - **Python** (`python/pyproject.toml`): basedpyright `typeCheckingMode = "strict"` with `reportAny = "error"` — `Any` is a hard error including via inference. Ruff selects ~40 rule families. `from __future__ import annotations` is required in every module (`isort.required-imports`).
-- **Trivial doc comments** (`crates/stoa-doclint`): a `syn`-based binary flags `///` comments that restate the identifier — e.g. `/// Crate version, sourced from Cargo.toml at build time.` above `pub const VERSION: &str = env!("CARGO_PKG_VERSION");`. Heuristic: every meaningful doc word (after stripping articles + `env!`-context filler) must appear in the identifier's word-tokens. Run via `just lint-docs`; wired into `just ci-rust`. The right move when flagged is almost always to **delete the comment** — if the doc had information beyond the identifier, the heuristic would not have flagged it.
+- **Comment policy** (`crates/stoa-doclint`, run via `just lint-docs`, wired into `just ci-rust`). Two roles only:
+  - **Doc comments** — `///`, `//!`, `/** */`, `/*! */`. Always allowed. Survive in `rustdoc` alongside the items they describe.
+  - **Inline notes** — bare `//` and `/* */`. Forbidden by default. A bare `//` line comment is only allowed when it opens with one of six durable intent prefixes: `SAFETY:`, `FIXME:`, `HACK:`, `PERF:`, `NOTE:`, `WHY:`. `TODO:` is intentionally **not** an allowed prefix — track TODOs in the issue tracker so they have an owner and a state. Non-doc block comments (`/* */`) are forbidden outright.
+- **Doc-comment content guidance.** What goes in `///`/`//!`/`/** */`:
+  - **How the thing works** — mechanism, control flow that matters to callers.
+  - **Invariants** — preconditions, postconditions, ordering constraints, ownership rules.
+  - **Edge cases + error conditions** — what fails, when, and how it manifests.
+  - **Non-obvious constraints** — performance characteristics callers depend on, concurrency rules, lifetime gotchas.
+
+  What **does not** belong:
+  - Restating the identifier (`/// Crate version` over `const VERSION`).
+  - Transient milestone or status info (`M1 skeleton — lands in M3`, `TODO before v0.2`). Roadmap state lives in `ROADMAP.md`, issue trackers, and PR descriptions.
+  - Implementation history (`originally...`, `before the refactor...`). Git remembers.
+  - Authorship, dates, or change logs.
+
+  The rule of thumb: if a future reader who has never seen the codebase would be more confused with the comment than without, delete it.
 
 **Escape hatches — always required, never bare:**
 
