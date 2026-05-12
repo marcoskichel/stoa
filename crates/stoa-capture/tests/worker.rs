@@ -240,6 +240,45 @@ fn worker_refuses_to_write_through_session_output_symlink() {
     assert!(body.is_empty(), "symlink target must not be overwritten: {body:?}");
 }
 
+fn seed_concurrent_sessions(cfg: &WorkerConfig, tmp_root: &Path) {
+    for n in 0..20_i32 {
+        let raw = tmp_root.join(format!("raw-{n}.jsonl"));
+        write_session_file(&raw, &[r#"{"role":"user","text":"hi"}"#]);
+        enqueue_capture(cfg, &format!("sess-conc-{n}"), &raw);
+    }
+}
+
+#[expect(clippy::unwrap_used, reason = "Test helper.")]
+fn drain_in_parallel(cfg: &WorkerConfig, workers: i32, ticks: i32) {
+    let handles: Vec<_> = (0..workers)
+        .map(|_| {
+            let cfg_c = cfg.clone();
+            std::thread::spawn(move || {
+                for _ in 0..ticks {
+                    let _ignored = stoa_capture::drain_once(&cfg_c);
+                }
+            })
+        })
+        .collect();
+    for h in handles {
+        h.join().unwrap();
+    }
+}
+
+#[test]
+fn audit_log_lines_stay_valid_json_under_concurrent_appends() {
+    let (tmp, cfg) = workspace();
+    seed_concurrent_sessions(&cfg, tmp.path());
+    drain_in_parallel(&cfg, 4, 20);
+    let audit = fs::read_to_string(&cfg.audit_log).unwrap();
+    for line in audit.lines() {
+        assert!(line.len() <= 4096, "audit line exceeds atomic-append budget: {line:?}");
+        let parsed: serde_json::Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("audit line not parseable as JSON ({e}): {line:?}"));
+        assert!(parsed.get("session_id").is_some());
+    }
+}
+
 #[test]
 fn worker_emits_transcript_captured_on_harvest_lane() {
     let (tmp, cfg) = workspace();
