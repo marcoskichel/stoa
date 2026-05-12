@@ -74,7 +74,7 @@ pub(crate) const DEFAULTS: &[Pattern] = &[
     },
     Pattern {
         kind: "bearer",
-        regex: r"(?i)\bBearer\s+[A-Za-z0-9_\-\.=]{20,}",
+        regex: r"(?i)\bBearer\s+[A-Za-z0-9_\-\.=]{20,}\b",
     },
     Pattern {
         kind: "email",
@@ -82,14 +82,14 @@ pub(crate) const DEFAULTS: &[Pattern] = &[
     },
     Pattern {
         kind: "path-ssh",
-        regex: r"[A-Za-z]?[/\\][^\s]*[/\\]\.ssh(?:[/\\][^\s]+)?",
+        regex: r#"[A-Za-z]?[/\\][^\s"',]*[/\\]\.ssh(?:[/\\][^\s"',]+)?"#,
     },
     Pattern {
         kind: "path-aws",
-        regex: r"[A-Za-z]?[/\\][^\s]*[/\\]\.aws(?:[/\\][^\s]+)?",
+        regex: r#"[A-Za-z]?[/\\][^\s"',]*[/\\]\.aws(?:[/\\][^\s"',]+)?"#,
     },
     Pattern {
         kind: "path-gnupg",
-        regex: r"[A-Za-z]?[/\\][^\s]*[/\\]\.gnupg(?:[/\\][^\s]+)?",
+        regex: r#"[A-Za-z]?[/\\][^\s"',]*[/\\]\.gnupg(?:[/\\][^\s"',]+)?"#,
     },
 ];

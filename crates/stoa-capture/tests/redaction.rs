@@ -23,8 +23,8 @@ fn redacts_aws_access_key() {
 fn redacts_stripe_live_key() {
     let r = default_redactor();
     // NOTE: build the test fixture at runtime so the `sk_live_*` literal never
-    // appears in source. GitHub push-protection scans source files and flags
-    // any matching string regardless of synthetic entropy.
+    // NOTE: appears in source. GitHub push-protection scans source files and flags
+    // NOTE: any matching string regardless of synthetic entropy.
     let key = format!("sk_{}_{}", "live", "z".repeat(28));
     let out = r.redact_line(&format!("token={key}"));
     assert!(has_redaction_marker(&out), "Stripe key not redacted: {out:?}");
@@ -152,4 +152,22 @@ fn jsonl_line_remains_parseable_after_redaction() {
     let out = r.redact_line(line);
     let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(&out);
     assert!(parsed.is_ok(), "redacted JSONL line must remain parseable: {out:?}");
+}
+
+#[test]
+fn jsonl_with_bearer_token_remains_parseable() {
+    let r = default_redactor();
+    let line = r#"{"hdr":"Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature123","next":"y"}"#;
+    let out = r.redact_line(line);
+    let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(&out);
+    assert!(parsed.is_ok(), "bearer redaction must not eat trailing JSON: {out:?}");
+}
+
+#[test]
+fn jsonl_with_ssh_path_remains_parseable() {
+    let r = default_redactor();
+    let line = r#"{"file":"/home/alice/.ssh/id_rsa","next":"y"}"#;
+    let out = r.redact_line(line);
+    let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(&out);
+    assert!(parsed.is_ok(), "ssh path redaction must not eat trailing JSON: {out:?}");
 }
