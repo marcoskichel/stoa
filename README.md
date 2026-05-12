@@ -4,4 +4,4 @@
 
 Open-core knowledge + memory system for AI agents. Compounding markdown wiki + hybrid recall, exposed through MCP for Claude Code, Cursor, Codex.
 
-**Pre-v0.1.** No code yet. See [PRODUCT.md](./PRODUCT.md) for the full vision, architecture, and business model.
+**Pre-v0.1.** No code yet. See [PRODUCT.md](./PRODUCT.md) for the vision, [ARCHITECTURE.md](./ARCHITECTURE.md) for mechanics, [ROADMAP.md](./ROADMAP.md) for the MVP shipping plan, and [ROADMAP-POST-MVP.md](./ROADMAP-POST-MVP.md) for what comes after.
