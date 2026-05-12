@@ -12,6 +12,13 @@ use anyhow::{Context, anyhow};
 /// Claude Code recognizes two relevant lifecycle hooks (`Stop` and
 /// `SessionEnd`); registering both gives us belt-and-braces coverage of
 /// every clean exit path.
+///
+/// NOTE: every `$VAR` expansion is wrapped in double quotes so paths with
+/// spaces or shell metacharacters (a workspace under `~/My Documents/...`,
+/// a session id containing `;`) don't break the hook command. Claude Code
+/// runs each entry through `/bin/sh -c`, so unquoted expansions would word-
+/// split on whitespace. Operators copying this snippet inherit the
+/// quoting and stay safe by default.
 const CLAUDE_CODE_SNIPPET: &str = r#"# Claude Code hook registration for Stoa
 #
 # Paste the JSON below into your `~/.config/claude-code/settings.json`
@@ -22,20 +29,21 @@ const CLAUDE_CODE_SNIPPET: &str = r#"# Claude Code hook registration for Stoa
 # SessionEnd — fires when the user ends the Claude Code session.
 #
 # Both are wired to the same handler; the worker is idempotent on
-# session_id so duplicates are no-ops.
+# session_id so duplicates are no-ops. Variable expansions are quoted to
+# tolerate paths with spaces or shell metacharacters.
 
 {
   "hooks": {
     "Stop": [
       {
         "type": "command",
-        "command": "stoa-hook --queue $STOA_WORKSPACE/.stoa/queue.db --session-id $CLAUDE_SESSION_ID --session-path $CLAUDE_SESSION_FILE --agent-id claude-code"
+        "command": "stoa-hook --queue \"$STOA_WORKSPACE/.stoa/queue.db\" --session-id \"$CLAUDE_SESSION_ID\" --session-path \"$CLAUDE_SESSION_FILE\" --agent-id claude-code"
       }
     ],
     "SessionEnd": [
       {
         "type": "command",
-        "command": "stoa-hook --queue $STOA_WORKSPACE/.stoa/queue.db --session-id $CLAUDE_SESSION_ID --session-path $CLAUDE_SESSION_FILE --agent-id claude-code"
+        "command": "stoa-hook --queue \"$STOA_WORKSPACE/.stoa/queue.db\" --session-id \"$CLAUDE_SESSION_ID\" --session-path \"$CLAUDE_SESSION_FILE\" --agent-id claude-code"
       }
     ]
   }

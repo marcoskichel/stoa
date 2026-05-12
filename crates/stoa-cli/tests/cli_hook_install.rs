@@ -32,6 +32,34 @@ fn hook_install_emits_claude_code_registration() {
 }
 
 #[test]
+fn hook_install_quotes_shell_variable_expansions() {
+    let ws = workspace();
+    init(&ws);
+    let out = stoa(&ws, &["hook", "install", "--platform", "claude-code"]);
+    let text = common::stdout(&out);
+    for var in [
+        "\\\"$STOA_WORKSPACE",
+        "\\\"$CLAUDE_SESSION_ID",
+        "\\\"$CLAUDE_SESSION_FILE",
+    ] {
+        assert!(
+            text.contains(var),
+            "snippet must wrap shell var in escaped double quotes ({var:?}): {text:?}",
+        );
+    }
+    for bare in [
+        " $STOA_WORKSPACE",
+        " $CLAUDE_SESSION_ID",
+        " $CLAUDE_SESSION_FILE",
+    ] {
+        assert!(
+            !text.contains(bare),
+            "snippet must not leave shell var unquoted ({bare:?}): {text:?}",
+        );
+    }
+}
+
+#[test]
 fn hook_install_unknown_platform_exits_non_zero() {
     let ws = workspace();
     init(&ws);
