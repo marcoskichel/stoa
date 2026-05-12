@@ -71,6 +71,7 @@ my-workspace/
     ├── queue.db          # hook → worker queue (SQLite)
     ├── workers/          # worker PID + heartbeat files
     ├── audit.log         # append-only operation log
+    ├── renders/          # pre-rendered SVG/HTML viz (see §12)
     └── locks/
 ```
 
@@ -595,25 +596,154 @@ Lightweight "what is everyone working on" board lives at `wiki/coordination.md`.
 
 ---
 
-## 12. Output rendering
+## 12. Visualization & output rendering
 
-The wiki stores knowledge in markdown. Rendering for non-markdown consumption is decoupled.
+The wiki stores knowledge in markdown for the agent and for the user-as-reader. **Visualization** is the user-as-explorer surface: the views that surface what the agent has learned, where memory is dense, where it contradicts itself, where it has grown over time. This section is opinionated because the visualization literature is opinionated, and Stoa imports those opinions wholesale rather than reinventing them.
 
-`stoa render <query> --as <format>` produces:
+### 12.1 Design principles (load-bearing)
 
-| Format | Use case |
+Five rules govern every viz Stoa ships. Violations are bugs, not style preferences. Sources cited in §12.7.
+
+1. **Position before area, area before color, for quantitative channels.** Cleveland & McGill (1984) ranked visual variables by perceptual accuracy; position is rank 1, area is rank 5, color saturation is rank 7. Magnitude encoded as bubble size or hue saturation goes through Stevens' power law compression — viewers systematically misjudge it. If Stoa needs precise quantitative comparison, the encoding is position (bar / dot / lollipop), full stop.
+2. **One pre-attentive channel per category dimension.** Treisman & Gelade (1980) and Healey, Booth & Enns (1996): a single distinct channel (hue OR shape OR size) supports sub-second target detection; combining two channels for one category produces conjunction search and destroys the pop-out advantage. Stoa picks one channel per categorical encoding (hue for entity type, shape for source kind), never both.
+3. **Overview first, filter, then details on demand.** Shneiderman's 1996 mantra. The knowledge graph at first render shows only high-degree nodes; the user filters and zooms into a neighborhood; details open in a panel that doesn't lose the overview. Architectural — not a UI layer choice.
+4. **Perceptually uniform colormaps for continuous data.** Viridis, cividis, or single-hue ColorBrewer sequential palettes for any continuous quantity. The jet/rainbow colormap is documented to cause diagnostic errors (Borland & Taylor 2007, "Rainbow Color Map (Still) Considered Harmful") via false perceptual edges at yellow and cyan transitions. Stoa's color module ships viridis as default and rejects rainbow palettes at lint time.
+5. **Treat UMAP/t-SNE projections as exploratory scaffolding, never ground truth.** Wattenberg, Viégas & Johnson (Distill 2016) and Damrich & Hamprecht (JMLR 2021): both methods preserve local neighborhoods only, fragment continuous distributions into false discrete clusters, and are parameter-sensitive to the point that the same data produces categorically different layouts. Stoa never displays a UMAP without an inline epistemic warning, and never lets a recall ranking depend on UMAP-projected distance.
+
+### 12.2 Banned anti-patterns (hard rejections)
+
+The viz module refuses to render these. The lint pass flags them in any user-authored `.viz` spec.
+
+- 3D bar charts, 3D pie charts, 3D scatter (perspective foreshortening = perceptual lie, no compensating gain).
+- Pie / donut charts with more than 5 slices (angle is rank 4; differences below ~10% are imperceptible).
+- Dual y-axes (visual correlation becomes a function of axis-range choice, not data).
+- Rainbow / jet colormap for continuous data.
+- Word clouds for analytical claims (decorative only; never as evidence).
+- Unfiltered force-directed layouts above 200 nodes (the "hairball" — auto-applies degree filter + community detection).
+- Bubble charts for ratio comparison (replace with bar length).
+- Venn diagrams above 3 sets (geometrically infeasible; rendered as UpSet plot instead).
+
+### 12.3 Data-type → primary viz mapping
+
+This table is the contract. Every Stoa data type that needs a visual has a backed default. The lint pass and the viz builder both consult this table.
+
+| Stoa data type | Primary viz | Backend (web) | Backend (markdown) | Anti-pattern guarded |
+|---|---|---|---|---|
+| Entity neighborhood (≤100 nodes) | Force-directed node-link, degree-filtered | Sigma.js + Graphology | Mermaid `flowchart` (snapshot) | Hairball |
+| Entity neighborhood (>100 nodes) | Filtered node-link + matrix toggle | Sigma.js + reorderable matrix | Snapshot SVG only | Unfiltered force layout |
+| Concept taxonomy navigation | Collapsible node-link tree | Observable Plot tree / D3 hierarchy | Mermaid `flowchart TD` | Sunburst (arc-length penalty) |
+| Concept coverage (size by branch) | Icicle plot | Observable Plot icicle | Pre-rendered SVG | Treemap (slower); sunburst |
+| Memory growth over time | Line chart | Observable Plot | Mermaid `xychart-beta` or SVG | Stacked area; 3D area |
+| Activity periodicity | Calendar heatmap | Observable Plot cell | Pre-rendered SVG | — |
+| Recall hit list | Ranked list with inline relevance bar (LineUp-style) | Custom React (visx primitives) | Markdown table with bar glyphs | Color-only relevance |
+| Distillation quality report | Sorted horizontal bar / dot plot | Observable Plot | Mermaid bar / SVG | Pie; 3D bar |
+| Set overlap (2–3 sets) | Area-proportional Euler | Observable Plot custom | Pre-rendered SVG | Venn with empty regions |
+| Set overlap (4+ sets) | UpSet plot | Custom (visx) | Pre-rendered SVG | Venn (infeasible) |
+| Document similarity | UMAP scatter + epistemic warning + numeric similarity on hover | Observable Plot scatter | Pre-rendered SVG with warning baked in | UMAP as ground-truth claim |
+| Architecture / flow / ER | — | Mermaid (web rendered) | Mermaid (native) | — |
+| Wiki page text | Typographic hierarchy: H1/H2/H3, 55–100 char width, bold entity anchors, inline highlights for linked ids | Markdown renderer | Markdown renderer | F-pattern degradation (Nielsen NN/g) |
+
+### 12.4 Module layout
+
+```
+stoa/render/
+├── spec.py                    # viz spec data model (declarative)
+├── encoding/
+│   ├── colors.py              # viridis + ColorBrewer; rainbow rejected
+│   ├── channels.py            # Cleveland-McGill rank-aware encoding picker
+│   └── lint.py                # anti-pattern detector (called by §8)
+├── views/
+│   ├── neighborhood.py        # entity → k-hop subgraph
+│   ├── taxonomy.py            # concept tree + icicle
+│   ├── timeline.py            # log → temporal view
+│   ├── ranked_list.py         # recall hits → LineUp
+│   ├── growth.py              # memory metrics over time
+│   ├── distillation.py        # quality reports
+│   ├── overlap.py             # Euler / UpSet
+│   └── similarity.py          # UMAP w/ warning preamble
+├── backends/
+│   ├── mermaid.py             # markdown-embeddable, native in GH/Obsidian
+│   ├── sigma_html.py          # standalone HTML for entity graph (Sigma.js + Graphology)
+│   ├── plot_svg.py            # Observable Plot → SVG (server-side via deno or node)
+│   ├── ratatui.py             # Rust TUI: sparklines, bars, lists (no deps)
+│   ├── sixel.py               # SVG → bitmap → sixel/kitty graphics
+│   └── ascii.py               # last-resort ASCII fallback (plotext-style)
+└── pipeline/
+    ├── worker.py              # subscribes to wiki.page.written → re-render
+    ├── cache.py               # .stoa/renders/<page-id>.svg + content-hash invalidation
+    └── snapshot.py            # bake static SVG next to wiki/<page>.md for git portability
+```
+
+A `VizSpec` is a declarative JSON/YAML object: data source (recall query, KG slice, page id), view type (one of the above), backend hints, and override knobs (color palette, max nodes). The view module turns the spec into a backend-specific render call. Backends are interchangeable — the same spec produces a Mermaid block for markdown embed, a Sigma.js HTML for the web UI, or a sixel stream for the terminal.
+
+### 12.5 Three rendering contexts
+
+**Markdown-embedded.** The wiki must remain portable. Stoa never assumes a custom renderer is available; default targets are GitHub-flavored markdown, Obsidian core, VS Code preview, and mkdocs.
+
+- **Mermaid** is the embedded code-block default for structural diagrams (flow, sequence, ER, gitGraph, mindmap, timeline, basic graphs). MIT, native rendering on GitHub and Obsidian. Used for: small entity neighborhoods, concept taxonomies, log timelines, distillation flow diagrams.
+- **Pre-rendered SVG** is the default for everything Mermaid can't do well: large entity graphs (Sigma.js → Puppeteer-snapshot → SVG), icicle plots, calendar heatmaps, UpSet plots, similarity scatters. The viz worker writes the SVG to `.stoa/renders/<page-id>-<view>.svg` and optionally bakes a copy next to `wiki/<page>.md` (configured via `STOA.md`) so the markdown stays git-portable.
+- **No proprietary plugin dependencies.** PlantUML (GPL, Java runtime) is rejected on license + dependency grounds. Kroki is rejected as a runtime dependency (network call); usable as a build-time helper if a workspace opts in.
+
+**Web UI.** A future browser viewer, target v0.4+, with the bias-toward-now decisions made early so Stoa doesn't accumulate technical debt.
+
+- **Sigma.js + Graphology** for the entity graph. WebGL renderer scales to ~10k nodes without main-thread blocking; Graphology is a clean in-memory graph data model with a force-atlas-2 WebWorker. MIT throughout. Cytoscape.js is the alternative if graph-analysis algorithms (PageRank, betweenness) become first-class — its built-in algorithm library is richer; revisit at v0.4 based on use cases.
+- **Observable Plot** for everything statistical (line, bar, scatter, heatmap, hierarchy). ISC license, ~200 KB, grammar-of-graphics API maps cleanly onto §12.3's data-type table.
+- **visx primitives** (Airbnb, MIT, ~15 KB modular) for the LineUp-style ranked-hit display and UpSet plots, where Observable Plot doesn't have a built-in.
+- **No Plotly** in the default bundle (~10 MB full distribution; even partial builds are heavy). No D3 directly except as a Sigma.js / Plot transitive dependency.
+
+**Terminal.** The `stoa` CLI is the v0.1 surface, so terminal output matters more than the web UI for early adopters.
+
+- **ratatui** (Rust, MIT) for TUI elements: sparklines, simple bar charts, ranked lists with inline bar glyphs. Zero runtime dependencies — works over SSH, in tmux, in CI logs.
+- **Capability detection** for richer output: query the terminal for sixel support (`\033[c`) and kitty graphics protocol (`KITTY_WINDOW_ID` env). On capable terminals (WezTerm, iTerm2 3.4+, kitty, foot), render the SVG via `resvg` (Rust crate, MIT) → `img2sixel` (libsixel, MIT) → stream pixels. Falls back to ratatui ASCII on plain xterm.
+- **No gnuplot dependency.** Non-standard license + system binary install requirement is hostile to a `cargo install stoa` user. Optional integration if the user already has it installed.
+- **No Python plotext as a hard dependency** for the same reason. Python is a fine optional helper for harvest/crystallize LLM glue, but the visualization path stays Rust-native.
+
+### 12.6 Pipeline
+
+The viz worker is a fourth background worker (alongside capture, harvest, lint) introduced in v0.3.
+
+1. Subscribes to `wiki.page.written`, `wiki.page.deleted`, `crystallize.tick`, and explicit `stoa render` invocations.
+2. Looks up the affected page kind in §12.3's table; queues the matching view types.
+3. For each view: builds a `VizSpec`, calls the appropriate backend(s), writes outputs to `.stoa/renders/<page-id>-<view>.<ext>` keyed by a content hash of (spec + source data). Re-render skipped on hash hit.
+4. Optionally snapshots SVGs into `wiki/.renders/` for git-portable embed (toggle in `STOA.md`).
+5. Audit log entry: `viz.rendered <page> <view> <backend> <ms>`.
+
+The pipeline runs off the agent hot path (fired by worker, never by hook). A render failure is a non-blocking event — the wiki page is still readable as markdown without its accompanying viz.
+
+### 12.7 CLI surface
+
+Augments the `stoa render` slot from §13:
+
+| Command | Description |
 |---|---|
-| `markdown` (default) | Pasted into chat, written to file |
-| `table` | Comparison across entities |
-| `timeline` | Temporal view of decisions / events |
-| `graph` | Mermaid graph of entity relationships (k-hop) |
-| `json` | Machine consumption / scripts |
-| `csv` | Spreadsheet export |
-| `brief` | Short prose summary suitable for Slack / email |
+| `stoa render <id> [--view <name>] [--backend mermaid|sigma|plot|ratatui|sixel] [--out path]` | Render a specific view for a page or query. Backend defaults to context (terminal → ratatui/sixel; `--out *.svg` → plot_svg; `--out *.html` → sigma_html; `--out *.md` → mermaid). |
+| `stoa view <id>` | Open the default web view for a page (spawns a local HTTP server bound to `127.0.0.1`). |
+| `stoa serve [--port 7000]` | Start the web UI for the workspace (v0.4+). |
+| `stoa render --bake` | Pre-render every page's default views into `wiki/.renders/`. Idempotent. |
+| `stoa render --check` | Run the anti-pattern lint over user-authored `.viz` spec files. |
 
-Renderers are pure functions over the recall result + KG slice + wiki pages. They live in `stoa/render/` and can be added by users via plugin path.
+### 12.8 Sources
 
-This is forward work; v0.1 ships markdown + json only.
+The principles above are not folklore; they are imported from the visualization literature.
+
+- Cleveland, W. S. & McGill, R. (1984). Graphical Perception. *JASA* 79(387). Perceptual ranking of visual variables.
+- Treisman, A. & Gelade, G. (1980). Feature-Integration Theory of Attention. *Cognitive Psychology* 12. Pre-attentive processing.
+- Healey, C. G., Booth, K. S. & Enns, J. T. (1996). High-Speed Visual Estimation Using Preattentive Processing. *ACM TOCHI* 3(2).
+- Shneiderman, B. (1996). The Eyes Have It. *IEEE Vis Languages*. Overview-first mantra.
+- Munzner, T. (2014). *Visualization Analysis and Design*. AK Peters/CRC.
+- Bertin, J. (1967/1983). *Sémiologie graphique*.
+- Ghoniem, M., Fekete, J. D. & Castagliola, P. (2005). On the Readability of Graphs Using Node-Link and Matrix-Based Representations. *Information Visualization* 4(2). Node-link vs. matrix crossover at ~20 nodes.
+- Heer, J., Kong, N. & Agrawala, M. (2009). Sizing the Horizon. *CHI 2009*. Horizon charts.
+- Heer, J. & Robertson, G. (2007). Animated Transitions in Statistical Data Graphics. *IEEE TVCG InfoVis*. When animation helps.
+- Lex, A., Gehlenborg, N., Strobelt, H., Vuillemot, R. & Pfister, H. (2014). UpSet: Visualization of Intersecting Sets. *IEEE TVCG InfoVis* 20(12).
+- Gratzl, S., Lex, A., Gehlenborg, N., Pfister, H. & Streit, M. (2013). LineUp. *IEEE InfoVis*.
+- Wattenberg, M., Viégas, F. & Johnson, I. (2016). How to Use t-SNE Effectively. *Distill*.
+- Damrich, S. & Hamprecht, F. (2021). Understanding How Dimension Reduction Tools Work. *JMLR* 22(87).
+- Borland, D. & Taylor, R. M. (2007). Rainbow Color Map (Still) Considered Harmful. *IEEE Computer Graphics and Applications*.
+- Brewer, C. ColorBrewer. cartography.psu.edu.
+- Garnier, S. et al. (2015). viridis colormap.
+- Jankun-Kelly, T. J. et al. (2019). Interactive Visualisation of Hierarchical Quantitative Data. arXiv:1908.01277. Icicle beats treemap and sunburst.
+- Liu, N. F. et al. (2024). Lost in the Middle. *TACL*. (Already cited in §6.)
 
 ---
 
@@ -691,8 +821,10 @@ The system is layered so users (and Stoa's own development) can adopt incrementa
 | 17. `MempalaceBackend` adapter | Optional alternative `RecallBackend` once mempalace API stabilizes (60+ days no breaking changes). | v0.3+ |
 | 18. Alternative backends | `LanceDbBackend`, `PgVectorBackend`, etc. as community-maintained adapters. | v0.4+ |
 | 19. Multi-agent | Scoping, promotion, mesh sync. | v0.4 |
-| 20. Output rendering | Tables, timelines, graphs, briefs. | v0.4+ |
-| 21. Reranker | Optional LLM reranking layer over top-N. | v0.4+ |
+| 20. Visualization (terminal + markdown) | `stoa render` for ratatui sparklines/bars + Mermaid embeds for entity neighborhoods, log timelines, distillation reports. Anti-pattern lint. | v0.2 |
+| 21. Visualization (pre-rendered SVG) | Viz worker subscribes to `wiki.page.written`, snapshots SVGs into `.stoa/renders/` and (opt-in) `wiki/.renders/` for git-portable embed. | v0.3 |
+| 22. Visualization (web UI) | `stoa serve` browser viewer with Sigma.js entity graph + Observable Plot stats + visx LineUp/UpSet primitives. | v0.4+ |
+| 23. Reranker | Optional LLM reranking layer over top-N. | v0.4+ |
 
 A user who wants only Tier 0 can use Stoa as `stoa init` + their editor + git. A user who wants the full thing gets it without leaving the workspace.
 

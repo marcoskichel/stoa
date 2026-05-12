@@ -45,6 +45,7 @@ The shape of the system, not the feature list. Each pillar is detailed in [ARCHI
 - **Lifecycle without decay theater.** Explicit supersession + staleness flags + git history. No silent decay scores, no Ebbinghaus forgetting curves on facts. Confidence scores live on relationships only and are derived, not gut-set.
 - **Event-driven automation.** Hook-triggered events (`agent.session.ended`, `transcript.captured`, `source.ingested`, `wiki.page.written`, `lint.tick`, `crystallize.tick`) run through async workers. User-extensible hooks (`.stoa/hooks/<event>/`).
 - **Privacy redaction at capture and ingest. MINJA defenses on injection.** Rule-based PII/secret redaction applied before content reaches `raw/` or `sessions/`. Always-flush on session exit (no `SAVE_INTERVAL` gate; mempalace #1341 was a silent-loss bug Stoa avoids by design). Injection content is structurally segregated from agent instructions, against the OWASP ASI06 memory-poisoning attack class. All in the OSS core, not the paid tier.
+- **Visualization is for humans, with the science enforced.** The wiki and recall surface are agent-readable by default (markdown, JSON), but Stoa ships a visualization module whose defaults are imported wholesale from the visualization literature: position before area before color (Cleveland-McGill 1984), one pre-attentive channel per category (Treisman 1980; Healey et al. 1996), overview-then-filter-then-detail (Shneiderman 1996), perceptually uniform colormaps (viridis; jet rejected per Borland & Taylor 2007), UMAP only with epistemic warnings (Wattenberg et al. 2016). Anti-patterns (3D bars, pie >5 slices, dual y-axes, hairball graphs, word clouds for analysis) are rejected at lint time, not stylistic preferences. Mermaid for markdown-portable diagrams, Sigma.js + Observable Plot for the web UI, ratatui + sixel for the terminal.
 - **Markdown is canonical.** The recall index is derived. Delete `.stoa/`, run `stoa rebuild`, get it all back. The user's knowledge survives Stoa.
 
 ## OSS core (MIT)
@@ -76,7 +77,7 @@ The OSS core stays MIT and stays useful by itself. If the paid layer never ships
 
 ## Differentiation
 
-Six things separate Stoa from the existing field.
+Seven things separate Stoa from the existing field.
 
 1. **Wiki + recall + injection in one tool.** The market has shipped fragments — Memoriki has the wiki + retrieval split but no injection layer; claude-mem has injection but no wiki write side; agentmemory has the hook suite but no schema. Nobody has shipped all three together with a quality contract.
 
@@ -90,6 +91,8 @@ Six things separate Stoa from the existing field.
 
 6. **Markdown is canonical; recall is derived.** The wiki is plain files. Users can grep them, edit them in Obsidian, version them in git, take them with them. The recall substrate is hidden behind a `RecallBackend` interface and is fully rebuildable from `wiki/` + `sessions/` + `raw/`. The user's knowledge survives Stoa, survives backend swaps, and survives Stoa being abandoned.
 
+7. **Science-backed visualization for humans, not chartware.** Most memory tools either expose no human-facing visual surface at all (mempalace, mem0, supermemory) or ship default chart libraries with no opinion (decorative dashboards). Stoa imports its visual defaults from the visualization literature — Cleveland-McGill perceptual ranking, Shneiderman's overview mantra, Treisman's pre-attentive channels, ColorBrewer/viridis colormaps, Ghoniem et al. for graph layout choice, Wattenberg et al. for UMAP epistemic limits. Banned anti-patterns (3D charts, rainbow colormaps, pie >5 slices, dual y-axes, unfiltered hairball graphs, analytical word clouds) are rejected by the renderer, not just discouraged. Markdown-embeddable Mermaid + pre-rendered SVG for portability; Sigma.js + Observable Plot in the web UI; ratatui + sixel in the terminal.
+
 ## Business model
 
 Open core. MIT-licensed core stays useful indefinitely. Paid layer (sync, team, hosted, audit) added once OSS adoption justifies the build. Reference precedents: Obsidian (free local, paid sync), Supabase, Plausible, Linear's early days.
@@ -99,9 +102,9 @@ Not building: pure SaaS competitor to Notion / mem.ai / Reflect — that lane is
 ## Roadmap (rough)
 
 - **v0.1 — walking skeleton.** CLI + markdown wiki + `RecallBackend` interface with `LocalChromaSqliteBackend` (vector + BM25 + KG) + Claude Code `Stop` hook + capture worker + PII redaction + always-flush + SessionStart injection with MINJA-resistant delimiters. Reproducible LongMemEval benchmark. Public.
-- **v0.2 — distillation + advanced injection.** Harvest worker with strict quality gating. Crystallize loop with invalidation pass. UserPromptSubmit and PreCompact (`systemMessage`-only) injection. Lint with deterministic + heuristic checks. User-extensible event hooks.
-- **v0.3 — cross-platform + experimental hooks + MCP.** Cursor and Codex capture + injection adapters. Lifecycle (supersession, staleness flow). PreToolUse experimental injection. Thin MCP wrapper that shells out to CLI. `MempalaceBackend` adapter ships if mempalace's API has been stable for ≥60 days.
-- **v0.4 — multi-agent + community backends.** Shared brain across agents. Scoping, promotion, mesh sync, conflict resolution. Community-maintained `LanceDbBackend`, `PgVectorBackend`.
+- **v0.2 — distillation + advanced injection + terminal viz.** Harvest worker with strict quality gating. Crystallize loop with invalidation pass. UserPromptSubmit and PreCompact (`systemMessage`-only) injection. Lint with deterministic + heuristic checks (including viz anti-pattern lint). User-extensible event hooks. `stoa render` ships with ratatui sparklines/bars and Mermaid embeds for entity neighborhoods, log timelines, and distillation reports.
+- **v0.3 — cross-platform + experimental hooks + MCP + pre-rendered SVG snapshots.** Cursor and Codex capture + injection adapters. Lifecycle (supersession, staleness flow). PreToolUse experimental injection. Thin MCP wrapper that shells out to CLI. `MempalaceBackend` adapter ships if mempalace's API has been stable for ≥60 days. Viz worker subscribes to `wiki.page.written` and snapshots SVGs into `.stoa/renders/` (and optionally `wiki/.renders/` for git-portable embed).
+- **v0.4 — multi-agent + community backends + web viewer.** Shared brain across agents. Scoping, promotion, mesh sync, conflict resolution. Community-maintained `LanceDbBackend`, `PgVectorBackend`. `stoa serve` browser viewer with Sigma.js entity graph, Observable Plot statistical charts, and visx LineUp/UpSet primitives.
 - **v1.0 — production.** Hardening, audit log surface, encryption-at-rest for `sessions/`. Begin paid-layer evaluation.
 
 No dates promised. Shipped honestly or not at all.
