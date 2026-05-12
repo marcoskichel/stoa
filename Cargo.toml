@@ -115,6 +115,10 @@ must_use_candidate = "allow"
 too_many_lines = "warn"
 similar_names = "allow"
 struct_excessive_bools = "allow"
+# Cosmetic-only; introduced in clippy 1.95 (PR #16530). Flags style on
+# format-like macros that does not affect semantics; relaxed workspace-wide
+# to keep generated/golden tests free of churn.
+unnecessary_trailing_comma = "allow"
 
 # Cargo group quiet-down for pre-1.0 (re-enable before publish)
 multiple_crate_versions = "allow"
