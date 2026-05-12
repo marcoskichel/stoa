@@ -293,7 +293,7 @@ class Hit:
     metadata: dict
 ```
 
-The `quality_suite` method is part of the contract, not optional. Backend swaps must be quality-gated against a fixed test corpus (the memory survey, arXiv:2603.07670, calls out "silent retrieval quality regression on backend swap" as a top failure mode). Stoa ships a baseline corpus with measured recall@k for the default backend; alternative adapters must publish numbers against the same corpus.
+The `quality_suite` method is part of the contract, not optional. Backend swaps must be quality-gated against a fixed test corpus (the memory survey, arXiv:2603.07670, calls out "silent retrieval quality regression on backend swap" as a top failure mode). Stoa ships a baseline suite with measured numbers for the default backend; alternative adapters must publish against the same suite before merging. The v0.1 suite covers long-term recall (LongMemEval), selective forgetting (MemoryAgentBench), multi-platform conflict resolution (MEMTRACK), scale stress (BEAM at 128K → 10M tokens), and the PII channel surface (AgentLeak), with MTEB/BEIR as the internal embedding-swap gate. Full plan, post-MVP additions, and the explicit out-of-scope list: [`benchmarks/README.md`](./benchmarks/README.md).
 
 #### v0.1 default backend: `LocalChromaSqliteBackend`
 
@@ -807,7 +807,7 @@ The system is layered so users (and Stoa's own development) can adopt incrementa
 | 3. Capture pipeline | Claude Code `Stop`/`SessionEnd` hook → queue → capture worker → redacted `sessions/`. Always-flush. | v0.1 |
 | 4. Privacy redaction | Rule-based PII filter applied at capture and ingest. | v0.1 |
 | 5. SessionStart injection | Top-K relevant pages prepended to system prompt at session boot. Token cap + relevance gate + MINJA-resistant XML delimiters. | v0.1 |
-| 6. Reproducible LongMemEval benchmark | Public scripts, fixed test corpus, recall@k for `LocalChromaSqliteBackend`. | v0.1 |
+| 6. Reproducible benchmark suite | Public scripts + fixed corpora for the v0.1 suite (LongMemEval, MemoryAgentBench, MEMTRACK, BEAM, AgentLeak) plus the MTEB/BEIR retrieval subset as the internal embedding-swap gate. Published per-backend results in [`benchmarks/results/`](./benchmarks/results/); see [`benchmarks/README.md`](./benchmarks/README.md) for the full plan. | v0.1 |
 | 7. Harvest | Per-session selective extraction → entity page updates with quality gating. | v0.2 |
 | 8. Lint | Deterministic auto-fix + heuristic report. | v0.2 |
 | 9. UserPromptSubmit injection | Per-turn relevance-gated injection with sliding similarity threshold. | v0.2 |
@@ -1007,7 +1007,7 @@ stoa/
 │   ├── stoa-render-mermaid/          # mermaid backend
 │   ├── stoa-render-svg/              # resvg + Sigma snapshot
 │   ├── stoa-render-tui/              # ratatui + sixel
-│   └── stoa-bench/                   # LongMemEval runner
+│   └── stoa-bench/                   # benchmark runners (LongMemEval, MemoryAgentBench, MEMTRACK, BEAM, AgentLeak, MTEB-subset)
 ├── python/                           # v0.1–v0.2 sidecar; deleted at v0.3
 │   ├── pyproject.toml                # uv workspace root
 │   ├── uv.lock
@@ -1019,10 +1019,20 @@ stoa/
 │   └── tests/
 ├── web/                              # reserved for v0.4+ web UI
 │   └── README.md                     # placeholder until then
-├── benchmarks/
-│   ├── corpus/                       # fixed test corpus (gitignored data; download script)
-│   ├── longmemeval/                  # reproducible runner
-│   └── results/                      # published recall@k per backend
+├── benchmarks/                       # see benchmarks/README.md for the full plan
+│   ├── corpus/                       # fixed corpora (gitignored data; download scripts)
+│   ├── results/                      # published per-backend per-benchmark numbers
+│   ├── longmemeval/                  # v0.1
+│   ├── memory-agent-bench/           # v0.1
+│   ├── memtrack/                     # v0.1
+│   ├── beam/                         # v0.1
+│   ├── agent-leak/                   # v0.1
+│   ├── mteb-retrieval/               # v0.1 (internal embedding-swap gate)
+│   ├── memory-arena/                 # post-MVP
+│   ├── fama/                         # post-MVP (gated on v0.3 crystallize)
+│   ├── ama-bench/                    # post-MVP (gated on KG layer)
+│   ├── swe-bench-cl/                 # post-MVP
+│   └── stark/                        # post-MVP (gated on KG layer)
 ├── docs/                             # mkdocs source for stoa.dev (later)
 ├── examples/                         # example workspaces
 │   ├── minimal/
@@ -1032,7 +1042,7 @@ stoa/
 │       ├── rust.yml                  # cargo build/test/clippy across targets
 │       ├── python.yml                # uv sync + pytest + ruff
 │       ├── release.yml               # cross-compile to 5 targets
-│       └── bench.yml                 # nightly LongMemEval against default backend
+│       └── bench.yml                 # nightly v0.1 benchmark suite against default backend
 └── .stoa-dev/                        # local dev workspace (gitignored)
 ```
 

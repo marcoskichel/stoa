@@ -16,7 +16,7 @@ Sizes are t-shirt: **S** = days, **M** = 1–2 weeks, **L** = 3–4 weeks, **XL*
 - Claude Code `Stop`/`SessionEnd` hook capturing redacted session transcripts in <10ms p95
 - Hybrid recall (vector + BM25 + small typed KG) via `LocalChromaSqliteBackend` behind a swappable `RecallBackend` trait
 - SessionStart injection of top-K relevant wiki pages with MINJA-resistant XML wrapping, hard token budget, relevance gate
-- Reproducible LongMemEval benchmark with published recall@k
+- Reproducible benchmark suite with published per-backend results: LongMemEval + MemoryAgentBench + MEMTRACK + BEAM + AgentLeak (full plan in [benchmarks/README.md](./benchmarks/README.md))
 
 **MVP is not**:
 - Harvest worker, crystallize loop, lint, lifecycle workflow → v0.2+
@@ -134,8 +134,14 @@ The MVP value proposition: **passive capture + auto-injection at session boot ma
 - `stoa init --no-embeddings` flag — BM25-only mode; opt in to embeddings later
 
 **Exit criteria**:
-- LongMemEval reproducible benchmark runner committed to `benchmarks/longmemeval/`
-- Published `recall@k` numbers in `benchmarks/results/v0.1-local-chroma-sqlite.md` (k=1, 5, 10)
+- Reproducible runners committed for every v0.1-tier benchmark: `benchmarks/longmemeval/`, `benchmarks/memory-agent-bench/`, `benchmarks/memtrack/`, `benchmarks/beam/`, `benchmarks/agent-leak/`, `benchmarks/mteb-retrieval/` (full plan: [benchmarks/README.md](./benchmarks/README.md))
+- Published per-backend results in `benchmarks/results/v0.1-local-chroma-sqlite-<benchmark>.md`:
+  - LongMemEval recall@1, @5, @10 per category
+  - MemoryAgentBench per-sub-task (incl. FactConsolidation-SH/MH)
+  - MEMTRACK aggregate Correctness + Efficiency + Redundancy
+  - BEAM at 128K + 1M tiers (10M optional, high-impact)
+  - AgentLeak per-channel (minimum: C1 output, C4 audit log, C5 shared-memory)
+  - MTEB/BEIR retrieval subset (internal-gate only — does not block v0.1 release if absent)
 - `stoa query` returns ranked hits with `source_path` always resolving to a real file
 - Three-stream fusion is correct: per-stream provenance attached to each hit
 - Cold start: `stoa init --no-embeddings` produces a working BM25-only workspace in <5s on fresh machine
@@ -192,7 +198,7 @@ The MVP value proposition: **passive capture + auto-injection at session boot ma
 **Exit criteria**:
 - Fresh-machine install works (verified by a non-author on macOS + Linux)
 - Quickstart in README produces a working workspace + first injection within 5 minutes
-- LongMemEval recall@k linked from README
+- v0.1 benchmark results linked from README (LongMemEval + MemoryAgentBench + MEMTRACK + BEAM + AgentLeak)
 - Public ship
 
 **Demo**: HN post live; user reports successful install + first injection.
@@ -204,7 +210,7 @@ The MVP value proposition: **passive capture + auto-injection at session boot ma
 These run continuously across all milestones, not as discrete deliverables:
 
 - **Performance budget**: Hook latency CI gate from M3 onward (<10ms p95). Any PR that regresses fails CI.
-- **Benchmarks**: `benchmarks/longmemeval/` runner stays green from M4 onward. Every backend or recall change re-runs and re-publishes.
+- **Benchmarks**: every v0.1-tier runner under `benchmarks/` stays green from M4 onward (LongMemEval, MemoryAgentBench, MEMTRACK, BEAM, AgentLeak, MTEB/BEIR). Every backend or recall change re-runs the full suite and re-publishes results. See [benchmarks/README.md](./benchmarks/README.md) for the post-MVP additions (MemoryArena, FAMA, AMA-Bench, SWE-Bench-CL, STaRK) and their gating milestones.
 - **Adversarial testing**: MINJA defenses validated continuously from M5. New attack vectors land as test cases in `crates/stoa-recall/tests/minja/`.
 - **Docs sync**: Every milestone updates `ARCHITECTURE.md` if mechanics change, `PRODUCT.md` if positioning changes, `CHANGELOG.md` always.
 - **Honest benchmarking discipline**: No test-corpus changes without re-running prior backends and re-publishing. No headline numbers from a different corpus than the public one.
@@ -215,7 +221,7 @@ These run continuously across all milestones, not as discrete deliverables:
 
 1. **No M after M0 starts until M0 ships.** The spike validates §15 architectural assumptions. If any fail, architecture revisions ship before any M1 code is written.
 2. **No M3 merge without hook latency CI gate green.** The <10ms budget is the architecture's load-bearing claim; protecting it begins on day one of M3.
-3. **No public release without published recall@k.** v0.1 ships with LongMemEval baseline numbers in `benchmarks/results/`. Without them, v0.1 stays unreleased.
+3. **No public release without the full v0.1 benchmark suite published.** v0.1 ships with results for every v0.1-tier benchmark (LongMemEval, MemoryAgentBench, MEMTRACK, BEAM, AgentLeak) in `benchmarks/results/`. MTEB/BEIR is an internal-gate exception. Without these, v0.1 stays unreleased.
 4. **No injection feature without audit log.** M5 ships `stoa inject log` in the same release as the hook itself. Injection without inspection is not shippable.
 5. **Demo before exit.** Every M's exit criteria includes a manual demo on a real Claude Code session, not just unit tests passing.
 
@@ -234,7 +240,7 @@ What does **not** get cut, ever, even under deadline pressure:
 - The <10ms hook latency budget (architecture assumption).
 - MINJA-resistant XML wrapping on every injection (security).
 - Always-flush capture (silent data loss is unrecoverable).
-- Published recall@k against a public corpus (credibility).
+- Published numbers for every v0.1-tier benchmark against public corpora (credibility).
 
 ---
 

@@ -1,6 +1,6 @@
 [package]
 name = "stoa-bench"
-description = "Stoa LongMemEval benchmark runner."
+description = "Stoa memory + recall benchmark runners (LongMemEval, MemoryAgentBench, MEMTRACK, BEAM, AgentLeak, MTEB-subset). See benchmarks/README.md."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
