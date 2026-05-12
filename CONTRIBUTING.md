@@ -21,6 +21,8 @@ Pinned via `rust-toolchain.toml` (stable 1.95) and `python/pyproject.toml` (Pyth
 - [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) — license + advisory + sources gate
 - [`cargo-machete`](https://github.com/bnjbvr/cargo-machete) — unused-dep finder
 - [`cross`](https://github.com/cross-rs/cross) — only needed for non-native Rust release builds
+- [`bacon`](https://dystroy.org/bacon/) — interactive Rust dev loop (`just dev`)
+- [`watchexec`](https://watchexec.github.io/) — cross-language file watcher (`just watch`)
 
 ## Coding rules
 

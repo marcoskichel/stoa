@@ -39,6 +39,23 @@ typecheck:
     cd python && uv run basedpyright
 
 # --------------------------------------------------------------------------
+# Watch / dev loop
+# Requires: `bacon` + `watchexec` (cargo install bacon watchexec-cli)
+# --------------------------------------------------------------------------
+
+# Interactive Rust dev loop (clippy on save).
+dev:
+    bacon clippy
+
+# Cross-language watcher: re-run lint + test on any .rs/.py/.toml change.
+watch:
+    watchexec --exts rs,py,toml --no-vcs-ignore --restart -- just lint test
+
+# Python-only test watcher.
+watch-py:
+    cd python && uv run pytest -q --looponfail
+
+# --------------------------------------------------------------------------
 # Strict caps + supply chain
 # --------------------------------------------------------------------------
 
