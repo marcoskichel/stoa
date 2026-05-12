@@ -119,7 +119,9 @@ fn is_doc_block(slice: &str) -> bool {
 
 fn has_allowed_prefix(line_comment: &str) -> bool {
     let body = line_comment.trim_start_matches('/').trim_start();
-    ALLOWED_PREFIXES.iter().any(|prefix| body.starts_with(prefix))
+    ALLOWED_PREFIXES
+        .iter()
+        .any(|prefix| body.starts_with(prefix))
 }
 
 fn snippet(slice: &str) -> String {
