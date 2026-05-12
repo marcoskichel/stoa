@@ -10,6 +10,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::Context;
+use chrono::{SecondsFormat, Utc};
 
 use crate::stoa_md::DEFAULT_STOA_MD;
 
@@ -35,9 +36,6 @@ sessions/
 
 const INDEX_MD_HEADER: &str =
     "# Wiki index\n\nAuto-generated catalog. Re-run `stoa write` to refresh.\n";
-// Leave log.md empty on init so the first event line is unambiguous; tests
-// rely on log.md being empty or containing "init" right after `stoa init`.
-const LOG_MD_HEADER: &str = "";
 
 /// Run `stoa init` in the current working directory.
 pub(crate) fn run() -> anyhow::Result<()> {
@@ -50,8 +48,20 @@ fn scaffold(root: &Path) -> anyhow::Result<()> {
     write_if_missing(&root.join("STOA.md"), DEFAULT_STOA_MD)?;
     write_if_missing(&root.join(".gitignore"), GITIGNORE_BODY)?;
     write_if_missing(&root.join("wiki/index.md"), INDEX_MD_HEADER)?;
-    write_if_missing(&root.join("wiki/log.md"), LOG_MD_HEADER)?;
+    append_init_event(&root.join("wiki/log.md"))?;
     Ok(())
+}
+
+fn append_init_event(log_path: &Path) -> anyhow::Result<()> {
+    let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let line = format!("{ts}  init  workspace scaffold\n");
+    let mut current = fs::read_to_string(log_path).unwrap_or_default();
+    if !current.is_empty() && !current.ends_with('\n') {
+        current.push('\n');
+    }
+    current.push_str(&line);
+    fs::write(log_path, current)
+        .with_context(|| format!("appending init event to `{}`", log_path.display()))
 }
 
 fn create_dirs(root: &Path) -> anyhow::Result<()> {

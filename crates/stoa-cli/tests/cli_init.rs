@@ -90,10 +90,8 @@ fn init_log_md_records_init_event() {
     init(&ws);
     let log = read_file(&ws, "wiki/log.md");
     // log.md format from ARCHITECTURE §2: timestamped, one line per event.
-    assert!(
-        contains(&log, "init") || log.trim().is_empty(),
-        "log.md may start empty or record an init event; got: {log:?}",
-    );
+    assert!(!log.trim().is_empty(), "log.md must record init event, not be empty");
+    assert!(contains(&log, "init"), "log.md must mention `init`; got: {log:?}");
 }
 
 #[test]
