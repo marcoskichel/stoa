@@ -31,6 +31,15 @@ const WORKER_PREFIX: &str = "stoa-capture";
 /// compete for each other's rows.
 const CAPTURE_LANE: &str = "capture";
 
+/// Lane the worker emits the follow-up `transcript.captured` row onto so
+/// the M4 harvest worker can pick it up without contending with capture.
+const HARVEST_LANE: &str = "harvest";
+
+/// Event name emitted after a successful drain so M4 harvest can pick up
+/// the redacted output. Distinct from the capture-lane
+/// `agent.session.ended` so an audit-log scrape can tell the two apart.
+const CAPTURED_EVENT: &str = "transcript.captured";
+
 /// Max processing attempts before a row is dead-lettered (`status='failed'`).
 ///
 /// On every `process()` error the worker increments the row's `attempts`
@@ -95,6 +104,7 @@ pub fn drain_once_with(q: &Queue, cfg: &WorkerConfig) -> Result<Option<DrainResu
     match process(cfg, &claim) {
         Ok(result) => {
             q.complete(claim.id)?;
+            enqueue_harvest_followup(q, &result)?;
             Ok(Some(result))
         },
         Err(e) => {
@@ -102,6 +112,21 @@ pub fn drain_once_with(q: &Queue, cfg: &WorkerConfig) -> Result<Option<DrainResu
             Err(e)
         },
     }
+}
+
+/// Insert a `transcript.captured` row on the harvest lane so the M4
+/// harvest worker can pick up the redacted output.
+///
+/// `INSERT OR IGNORE` semantics mean a re-capture of the same session
+/// won't double-fire while the prior harvest row is still live — the
+/// `(lane, session_id)` partial unique index gates it.
+fn enqueue_harvest_followup(q: &Queue, result: &DrainResult) -> Result<()> {
+    let payload = serde_json::json!({
+        "session_id": result.session_id,
+        "session_path": result.output_path.display().to_string(),
+    });
+    q.insert_lane(HARVEST_LANE, CAPTURED_EVENT, &result.session_id, &payload)?;
+    Ok(())
 }
 
 fn handle_failure(q: &Queue, claim: &ClaimedRow, err: &Error) -> Result<()> {

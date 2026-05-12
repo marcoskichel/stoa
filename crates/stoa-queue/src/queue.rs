@@ -195,6 +195,23 @@ impl Queue {
         })
     }
 
+    /// Peek the first pending row on `lane` without claiming it. Test helper.
+    pub fn peek_first_pending_on_lane(&self, lane: &str) -> Result<Option<Row>> {
+        with_conn(&self.conn, |c| {
+            let mut stmt = c.prepare(PEEK_LANE_SQL)?;
+            let mut rows = stmt.query(params![lane])?;
+            let Some(r) = rows.next()? else {
+                return Ok(None);
+            };
+            Ok(Some(Row {
+                id: r.get(0)?,
+                session_id: r.get(1)?,
+                event: r.get(2)?,
+                payload: r.get(3)?,
+            }))
+        })
+    }
+
     /// Run `PRAGMA wal_checkpoint(TRUNCATE)` to flush + truncate the WAL.
     ///
     /// `SQLite` checkpoints opportunistically but never truncates the WAL
@@ -294,5 +311,12 @@ const PEEK_SQL: &str = "\
 SELECT id, session_id, event, payload \
   FROM queue_events \
  WHERE status IN ('pending', 'claimed') \
+ ORDER BY id ASC \
+ LIMIT 1;";
+
+const PEEK_LANE_SQL: &str = "\
+SELECT id, session_id, event, payload \
+  FROM queue_events \
+ WHERE status IN ('pending', 'claimed') AND lane = ?1 \
  ORDER BY id ASC \
  LIMIT 1;";

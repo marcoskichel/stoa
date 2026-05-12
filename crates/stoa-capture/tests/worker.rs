@@ -101,7 +101,10 @@ fn worker_marks_queue_row_done() {
     enqueue_capture(&cfg, "sess-004", &raw);
     stoa_capture::drain_once(&cfg).unwrap();
     let q = Queue::open(&cfg.queue_path).unwrap();
-    assert_eq!(q.pending_count().unwrap(), 0, "queue must drain to zero pending");
+    assert!(
+        q.peek_first_pending_on_lane("capture").unwrap().is_none(),
+        "capture lane must drain to zero pending",
+    );
 }
 
 #[test]
@@ -235,6 +238,26 @@ fn worker_refuses_to_write_through_session_output_symlink() {
     }
     let body = fs::read_to_string(&evil).unwrap();
     assert!(body.is_empty(), "symlink target must not be overwritten: {body:?}");
+}
+
+#[test]
+fn worker_emits_transcript_captured_on_harvest_lane() {
+    let (tmp, cfg) = workspace();
+    let raw = tmp.path().join("raw.jsonl");
+    write_session_file(&raw, &[r#"{"role":"user","text":"hi"}"#]);
+    enqueue_capture(&cfg, "sess-followup", &raw);
+    stoa_capture::drain_once(&cfg).unwrap();
+    let q = Queue::open(&cfg.queue_path).unwrap();
+    let row = q
+        .peek_first_pending_on_lane("harvest")
+        .unwrap()
+        .expect("transcript.captured row must exist on the harvest lane");
+    assert_eq!(row.event, "transcript.captured");
+    assert_eq!(row.session_id, "sess-followup");
+    assert!(
+        row.payload.contains("sess-followup.jsonl"),
+        "harvest payload must point at redacted output: {row:?}",
+    );
 }
 
 #[test]
