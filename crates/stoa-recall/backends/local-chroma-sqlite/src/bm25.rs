@@ -40,7 +40,7 @@ impl From<Bm25Error> for RecallError {
     fn from(e: Bm25Error) -> Self {
         match e {
             Bm25Error::Io(io) => Self::Io(io),
-            Bm25Error::Sqlite(s) => Self::Other(format!("sqlite: {s}")),
+            Bm25Error::Sqlite(s) => Self::Sqlite(s.to_string()),
         }
     }
 }

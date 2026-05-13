@@ -59,6 +59,16 @@ pub enum RecallError {
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// Backend storage failure (`SQLite`, vector store, ...).
+    ///
+    /// Carried as a flat string so the trait stays substrate-free
+    /// (no `rusqlite` in `stoa-recall`'s public surface), but typed
+    /// distinctly from `Other` so callers can pattern-match on
+    /// "this is a storage problem" vs. "this is a generic backend
+    /// error".
+    #[error("sqlite: {0}")]
+    Sqlite(String),
+
     /// Backend exceeded the per-call deadline.
     #[error("deadline exceeded after {millis}ms")]
     DeadlineExceeded {
