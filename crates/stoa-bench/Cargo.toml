@@ -13,7 +13,7 @@ name = "stoa-bench"
 path = "src/main.rs"
 
 [dependencies]
-stoa-recall = { path = "../stoa-recall" }
+stoa-recall = { path = "../stoa-recall", version = "0.1.0" }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
