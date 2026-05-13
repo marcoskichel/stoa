@@ -135,6 +135,7 @@ async fn await_response(
 ) -> Result<serde_json::Value, RecallError> {
     let start = Instant::now();
     let mut interval = tokio::time::interval(POLL_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         interval.tick().await;
         if let Some(result) = try_take_response(queue, request_id)? {
