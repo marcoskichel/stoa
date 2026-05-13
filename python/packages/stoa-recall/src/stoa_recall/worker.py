@@ -1,11 +1,17 @@
 """Recall worker entry point.
 
 Run as `python -m stoa_recall.worker --queue <path>`; loops claiming
-rows from `recall.request`, dispatching to a typed handler, and writing
+rows from BOTH `recall.request` (write-side acks) AND `recall.search`
+(read-side search), dispatching to a typed handler, and writing
 `recall.response` rows back. ChromaDB / fastembed are not yet wired —
 M4 ships the IPC round-trip + dispatch surface so the Rust IpcBackend
 no longer always degrades to BM25; concrete vector / KG search lands
 in M5.
+
+The two-lane split exists so the Rust daemon can drain
+`recall.request` (BM25 reindex on `index_page`/`remove`) without ever
+seeing a `search` row it cannot service — which would otherwise cycle
+claim → release indefinitely while the sidecar is offline.
 
 Worker semantics mirror the Rust capture worker:
 
@@ -25,7 +31,7 @@ import sys
 import time
 
 from stoa_recall import dispatch
-from stoa_recall.ipc import REQUEST_LANE, RESPONSE_LANE
+from stoa_recall.ipc import REQUEST_LANE, RESPONSE_LANE, SEARCH_LANE
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -108,7 +114,11 @@ def _claim_and_handle(conn: sqlite3.Connection) -> bool:
 
 
 def _claim_one(conn: sqlite3.Connection) -> tuple[int, str, str] | None:
-    """Atomically claim the next `recall.request` row.
+    """Atomically claim the next row from either request lane.
+
+    Drains BOTH `recall.request` (write-side acks) AND `recall.search`
+    (read-side search). The Rust daemon only claims `recall.request`,
+    so search rows are guaranteed to land on this worker.
 
     Uses the same `BEGIN IMMEDIATE` round-trip as the Rust
     `stoa-capture` worker so the two pools share lease semantics.
@@ -117,7 +127,10 @@ def _claim_one(conn: sqlite3.Connection) -> tuple[int, str, str] | None:
     lease_expires = int(time.time()) + LEASE_SECS
     _ = conn.execute("BEGIN IMMEDIATE;")
     try:
-        cursor = conn.execute(_CLAIM_SQL, (worker_id, lease_expires, REQUEST_LANE))
+        cursor = conn.execute(
+            _CLAIM_SQL,
+            (worker_id, lease_expires, REQUEST_LANE, SEARCH_LANE),
+        )
         row: object = cursor.fetchone()  # type: ignore[reportAny]
         _ = conn.execute("COMMIT;")
     except sqlite3.Error:
@@ -170,7 +183,7 @@ UPDATE queue_events
         SELECT id FROM queue_events
          WHERE (status = 'pending'
              OR (status = 'claimed' AND lease_expires < unixepoch()))
-           AND lane = ?3
+           AND lane IN (?3, ?4)
          ORDER BY id ASC
          LIMIT 1
        )

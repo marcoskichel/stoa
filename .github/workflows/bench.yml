@@ -52,7 +52,7 @@ jobs:
         run: cd python && uv sync --all-groups
 
       - name: Download corpus
-        if: ${{ inputs.smoke != true && github.event_name != 'schedule' }}
+        if: ${{ github.event_name != 'schedule' && inputs.smoke != 'true' }}
         run: |
           pip install huggingface_hub[cli]
           bash benchmarks/corpus/longmemeval.sh
@@ -64,9 +64,9 @@ jobs:
 
       - name: Run benchmark
         env:
-          BENCH_BACKEND: ${{ inputs.backend || env.NIGHTLY_BACKEND }}
+          BENCH_BACKEND: ${{ github.event_name == 'schedule' && env.NIGHTLY_BACKEND || inputs.backend }}
           BENCH_NAME: ${{ inputs.bench }}
-          BENCH_SMOKE: ${{ inputs.smoke || env.NIGHTLY_SMOKE }}
+          BENCH_SMOKE: ${{ github.event_name == 'schedule' && env.NIGHTLY_SMOKE || inputs.smoke }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           mkdir -p benchmarks/results

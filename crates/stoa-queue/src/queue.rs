@@ -138,17 +138,6 @@ impl Queue {
         })
     }
 
-    /// Release a claimed row back to `pending` without incrementing its attempts counter.
-    ///
-    /// Use this when a worker claims a row it cannot handle (method owned by a
-    /// different worker pool). The row becomes immediately eligible for re-claim.
-    pub fn release(&self, id: i64) -> Result<()> {
-        with_conn(&self.conn, |c| {
-            c.execute(RELEASE_SQL, params![id])?;
-            Ok(())
-        })
-    }
-
     /// Record a failed processing attempt for row `id`.
     ///
     /// Increments `attempts` by 1. If the new `attempts` reaches
@@ -342,7 +331,6 @@ INSERT OR IGNORE INTO queue_events \
     VALUES (?1, ?2, ?3, ?4, 'pending', unixepoch());";
 
 const COMPLETE_SQL: &str = "UPDATE queue_events SET status='done' WHERE id=?1;";
-const RELEASE_SQL: &str = "UPDATE queue_events SET status='pending', claimed_by=NULL, claimed_at=NULL, lease_expires=NULL WHERE id=?1;";
 
 /// Atomic failure-record statement.
 ///

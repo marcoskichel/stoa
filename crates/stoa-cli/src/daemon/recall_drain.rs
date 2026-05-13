@@ -1,10 +1,15 @@
 //! Drain one row from the `recall.request` lane.
 //!
-//! For M4 the only supported method is `index_page` — the daemon
-//! re-indexes the named page (or every changed page if the watcher
-//! enqueued the row in batch mode). Vector/KG ingestion are deferred to
-//! the Python sidecar; the Rust daemon handles BM25 reindex inline so
-//! single-stream queries succeed without the sidecar.
+//! The Rust daemon owns BM25-side reindex for `index_page` and
+//! `remove_page` so single-stream queries succeed even when the
+//! Python sidecar is down. Vector / KG ingest are owned by the
+//! sidecar; rows of those methods are acked separately on the same
+//! lane by the Python worker.
+//!
+//! Read-side `search` rows live on a different lane
+//! ([`stoa_recall_local_chroma_sqlite::SEARCH_LANE`]) and are never
+//! claimed here — splitting reads from writes is what prevents a
+//! claim → release livelock when the sidecar is offline.
 
 use std::path::Path;
 
@@ -27,14 +32,6 @@ const LEASE_SECS: i64 = 60;
 /// Max retry budget per row before dead-lettering.
 const MAX_ATTEMPTS: i64 = 3;
 
-/// Outcome of one `drain_one` call.
-enum DrainOutcome {
-    /// The row was successfully processed and should be marked done.
-    Processed,
-    /// The row's method is owned by a different worker; release it to pending.
-    Skipped,
-}
-
 /// Drain one row from `recall.request`. Returns `Ok(true)` if a row was
 /// processed, `Ok(false)` if the lane was empty.
 pub(crate) fn drain_one(workspace_root: &Path, queue: &Queue) -> anyhow::Result<bool> {
@@ -44,29 +41,15 @@ pub(crate) fn drain_one(workspace_root: &Path, queue: &Queue) -> anyhow::Result<
     else {
         return Ok(false);
     };
-    handle_outcome(queue, &row, process(workspace_root, &row))
-}
-
-fn handle_outcome(
-    queue: &Queue,
-    row: &ClaimedRow,
-    outcome: anyhow::Result<DrainOutcome>,
-) -> anyhow::Result<bool> {
-    match outcome {
-        Ok(DrainOutcome::Processed) => {
+    match process(workspace_root, &row) {
+        Ok(()) => {
             queue
                 .complete(row.id)
                 .context("marking recall.request done")?;
             Ok(true)
         },
-        Ok(DrainOutcome::Skipped) => {
-            queue
-                .release(row.id)
-                .context("releasing recall.request row to sidecar")?;
-            Ok(false)
-        },
         Err(e) => {
-            record_failure(queue, row, &e)?;
+            record_failure(queue, &row, &e)?;
             Err(e)
         },
     }
@@ -87,7 +70,7 @@ fn record_failure(queue: &Queue, row: &ClaimedRow, err: &anyhow::Error) -> anyho
     Ok(())
 }
 
-fn process(workspace_root: &Path, row: &ClaimedRow) -> anyhow::Result<DrainOutcome> {
+fn process(workspace_root: &Path, row: &ClaimedRow) -> anyhow::Result<()> {
     let payload: serde_json::Value = serde_json::from_str(&row.payload)
         .with_context(|| format!("parsing recall.request payload: {}", row.payload))?;
     let method = payload
@@ -99,12 +82,11 @@ fn process(workspace_root: &Path, row: &ClaimedRow) -> anyhow::Result<DrainOutco
         .cloned()
         .unwrap_or(serde_json::Value::Null);
     match method {
-        "index_page" => index_one_page(workspace_root, &args).map(|()| DrainOutcome::Processed),
-        "remove_page" => remove_one_page(workspace_root, &args).map(|()| DrainOutcome::Processed),
-        other => {
-            tracing::debug!(method = other, "skipping recall.request row owned by sidecar");
-            Ok(DrainOutcome::Skipped)
-        },
+        "index_page" => index_one_page(workspace_root, &args),
+        "remove_page" => remove_one_page(workspace_root, &args),
+        other => Err(anyhow!(
+            "recall.request: unknown method `{other}` (search lives on `recall.search`)"
+        )),
     }
 }
 
