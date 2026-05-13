@@ -35,7 +35,6 @@ trycmd = { workspace = true }
 assert_fs = { workspace = true }
 serde_yaml = { workspace = true }
 stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
-stoa-inject-hooks = { path = "../stoa-inject-hooks", version = "0.1.0" }
 serde_json = { workspace = true }
 
 [lints]

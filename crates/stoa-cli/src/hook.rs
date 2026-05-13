@@ -50,7 +50,7 @@ const CLAUDE_CODE_SNIPPET: &str = r#"# Claude Code hook registration for Stoa
 }
 "#;
 
-/// SessionStart injection snippet (Claude Code).
+/// `SessionStart` injection snippet (Claude Code).
 ///
 /// `stoa-inject-hook` reads the JSON payload Claude Code sends on
 /// stdin and writes a `hookSpecificOutput.additionalContext` JSON

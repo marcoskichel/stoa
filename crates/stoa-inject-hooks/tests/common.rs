@@ -17,6 +17,14 @@
     clippy::unwrap_used,
     reason = "Test helpers panic on setup failure — fast-fail on tmp-dir / IO errors is intended."
 )]
+#![allow(
+    clippy::panic,
+    reason = "Test helpers panic to fail fast on missing CARGO_BIN_EXE_* env (broken cargo wiring)."
+)]
+#![allow(
+    clippy::expect_used,
+    reason = "Test helpers expect() to surface a setup error message at the test boundary."
+)]
 
 use std::process::Output;
 
@@ -81,9 +89,8 @@ pub fn stderr(out: &Output) -> String {
 }
 
 fn inject_hook_bin() -> String {
-    std::env::var("CARGO_BIN_EXE_stoa-inject-hook").unwrap_or_else(|_| {
-        panic!("CARGO_BIN_EXE_stoa-inject-hook not set — broken cargo wiring")
-    })
+    std::env::var("CARGO_BIN_EXE_stoa-inject-hook")
+        .unwrap_or_else(|_| panic!("CARGO_BIN_EXE_stoa-inject-hook not set — broken cargo wiring"))
 }
 
 /// Cargo only sets `CARGO_BIN_EXE_<name>` for binaries in the *same*
@@ -92,7 +99,9 @@ fn inject_hook_bin() -> String {
 /// expose to us — both land in the same `target/<profile>/` directory.
 fn stoa_bin() -> std::path::PathBuf {
     let inject = std::path::PathBuf::from(inject_hook_bin());
-    let dir = inject.parent().expect("inject hook bin must have a parent dir");
+    let dir = inject
+        .parent()
+        .expect("inject hook bin must have a parent dir");
     let exe_suffix = std::env::consts::EXE_SUFFIX;
     dir.join(format!("stoa{exe_suffix}"))
 }

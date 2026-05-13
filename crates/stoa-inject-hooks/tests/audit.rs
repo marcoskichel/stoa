@@ -6,6 +6,15 @@
 //! query, returned hit count, char count of the wrapped block, and the
 //! session id from the inbound payload.
 
+#![allow(
+    clippy::panic,
+    reason = "Test helpers panic to surface a missing audit log at the test boundary."
+)]
+#![allow(
+    clippy::too_many_lines,
+    reason = "Assertion-heavy E2E gate; splitting would obscure the contract."
+)]
+
 mod common;
 
 use common::{init, inject_hook, rebuild, stderr, workspace, write_file};
@@ -38,8 +47,7 @@ fn payload(workspace_path: &std::path::Path, session_id: &str) -> String {
 
 fn read_audit_log(ws: &assert_fs::TempDir) -> String {
     let p = ws.path().join(".stoa").join("audit.log");
-    std::fs::read_to_string(&p)
-        .unwrap_or_else(|_| panic!("audit log missing at {}", p.display()))
+    std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("audit log missing at {}", p.display()))
 }
 
 #[test]
@@ -51,7 +59,10 @@ fn injection_appends_jsonl_audit_line() {
     let out = inject_hook(&ws, &payload(ws.path(), "01JAUDITSESS00000000000001"));
     assert!(out.status.success(), "{}", stderr(&out));
     let log = read_audit_log(&ws);
-    let last = log.lines().last().expect("audit log must contain at least one line");
+    let last = log
+        .lines()
+        .last()
+        .expect("audit log must contain at least one line");
     let parsed: serde_json::Value = serde_json::from_str(last)
         .unwrap_or_else(|e| panic!("audit row must be valid JSON ({e}): {last}"));
     assert_eq!(
@@ -59,20 +70,23 @@ fn injection_appends_jsonl_audit_line() {
         Some("stoa.inject"),
         "audit row event must be `stoa.inject`: {last}",
     );
-    assert_eq!(
-        parsed.get("hook_event_name").and_then(|v| v.as_str()),
-        Some("SessionStart"),
-    );
+    assert_eq!(parsed.get("hook_event_name").and_then(|v| v.as_str()), Some("SessionStart"),);
     assert_eq!(
         parsed.get("session_id").and_then(|v| v.as_str()),
         Some("01JAUDITSESS00000000000001"),
     );
     assert!(
-        parsed.get("hits").and_then(serde_json::Value::as_u64).is_some(),
+        parsed
+            .get("hits")
+            .and_then(serde_json::Value::as_u64)
+            .is_some(),
         "audit row must record a numeric `hits` count: {last}",
     );
     assert!(
-        parsed.get("chars_injected").and_then(serde_json::Value::as_u64).is_some(),
+        parsed
+            .get("chars_injected")
+            .and_then(serde_json::Value::as_u64)
+            .is_some(),
         "audit row must record `chars_injected` for utilization tracking: {last}",
     );
 }

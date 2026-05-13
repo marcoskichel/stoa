@@ -1,4 +1,4 @@
-//! E2E quality gate: `stoa inject log` — view SessionStart injection
+//! E2E quality gate: `stoa inject log` — view `SessionStart` injection
 //! history from `.stoa/audit.log`.
 //!
 //! Spec source: ROADMAP.md M5 + ARCHITECTURE.md §6.2.
@@ -6,6 +6,11 @@
 //! Mirrors `stoa query --json`: prints one JSON line per injection event
 //! when `--json` is passed, ordered most-recent-first. `--limit N` caps
 //! output; `--session <id>` filters to a single session.
+
+#![allow(
+    clippy::unwrap_used,
+    reason = "Test helpers fast-fail on tmp-dir / IO setup errors."
+)]
 
 mod common;
 
@@ -44,7 +49,10 @@ fn inject_log_subcommand_exists_in_help() {
     let ws = workspace();
     let out = stoa(&ws, &["--help"]);
     let body = stdout(&out);
-    assert!(body.contains("inject"), "`stoa --help` must list the `inject` subcommand: {body}");
+    assert!(
+        body.contains("inject"),
+        "`stoa --help` must list the `inject` subcommand: {body}"
+    );
 }
 
 #[test]
@@ -62,8 +70,14 @@ fn inject_log_outside_workspace_exits_non_zero() {
 fn inject_log_emits_recorded_events() {
     let ws = workspace();
     init(&ws);
-    write_audit_line(&ws, &make_event("01JINJECTLOGSESSION00000001", "<stoa-memory>page A</stoa-memory>"));
-    write_audit_line(&ws, &make_event("01JINJECTLOGSESSION00000002", "<stoa-memory>page B</stoa-memory>"));
+    write_audit_line(
+        &ws,
+        &make_event("01JINJECTLOGSESSION00000001", "<stoa-memory>page A</stoa-memory>"),
+    );
+    write_audit_line(
+        &ws,
+        &make_event("01JINJECTLOGSESSION00000002", "<stoa-memory>page B</stoa-memory>"),
+    );
     let out = stoa(&ws, &["inject", "log"]);
     assert!(out.status.success(), "{}", stderr(&out));
     let body = stdout(&out);
@@ -85,8 +99,14 @@ fn inject_log_emits_recorded_events() {
 fn inject_log_filter_by_session() {
     let ws = workspace();
     init(&ws);
-    write_audit_line(&ws, &make_event("01JINJECTLOGSESSION00000001", "<stoa-memory>page A</stoa-memory>"));
-    write_audit_line(&ws, &make_event("01JINJECTLOGSESSION00000002", "<stoa-memory>page B</stoa-memory>"));
+    write_audit_line(
+        &ws,
+        &make_event("01JINJECTLOGSESSION00000001", "<stoa-memory>page A</stoa-memory>"),
+    );
+    write_audit_line(
+        &ws,
+        &make_event("01JINJECTLOGSESSION00000002", "<stoa-memory>page B</stoa-memory>"),
+    );
     let out = stoa(&ws, &["inject", "log", "--session", "01JINJECTLOGSESSION00000002"]);
     assert!(out.status.success(), "{}", stderr(&out));
     let body = stdout(&out);

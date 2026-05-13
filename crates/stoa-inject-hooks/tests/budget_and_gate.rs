@@ -1,7 +1,7 @@
 //! E2E quality gate: token-budget cap + relevance gate.
 //!
 //! Spec source: ARCHITECTURE.md §6.2 — every injection enforces a hard
-//! token cap (default 1500 tokens for SessionStart) and a relevance
+//! token cap (default 1500 tokens for `SessionStart`) and a relevance
 //! threshold below which no injection is emitted.
 //!
 //! These tests are deliberately conservative: token estimation is

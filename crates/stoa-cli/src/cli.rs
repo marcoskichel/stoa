@@ -109,7 +109,7 @@ pub(crate) enum Command {
         action: IndexAction,
     },
 
-    /// Inspect SessionStart injection history (`.stoa/audit.log`).
+    /// Inspect `SessionStart` injection history (`.stoa/audit.log`).
     Inject {
         #[command(subcommand)]
         action: InjectAction,
@@ -124,7 +124,7 @@ pub(crate) enum HookAction {
         /// Target platform (e.g. `claude-code`).
         #[arg(long)]
         platform: String,
-        /// Emit the SessionStart injection snippet instead of the
+        /// Emit the `SessionStart` injection snippet instead of the
         /// capture snippet (e.g. `--inject session-start`).
         #[arg(long, value_name = "KIND")]
         inject: Option<String>,

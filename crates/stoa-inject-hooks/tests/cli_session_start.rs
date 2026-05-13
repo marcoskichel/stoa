@@ -1,8 +1,8 @@
-//! E2E quality gate: `stoa-inject-hook` SessionStart handler.
+//! E2E quality gate: `stoa-inject-hook` `SessionStart` handler.
 //!
 //! Spec sources: ROADMAP.md M5 + ARCHITECTURE.md §6.2.
 //!
-//! Pins the contract Claude Code expects on the SessionStart hook:
+//! Pins the contract Claude Code expects on the `SessionStart` hook:
 //!
 //! - Reads stdin JSON with `hook_event_name`, `cwd`, `session_id`,
 //!   `transcript_path`, `model`, `source` (one of
@@ -56,8 +56,7 @@ fn emits_hook_specific_output_envelope() {
     let out = inject_hook(&ws, &payload(ws.path()));
     assert!(out.status.success(), "hook must exit 0 on success: stderr={}", stderr(&out));
     let body = stdout(&out);
-    let parsed: serde_json::Value =
-        serde_json::from_str(&body).expect("stdout must be valid JSON");
+    let parsed: serde_json::Value = serde_json::from_str(&body).expect("stdout must be valid JSON");
     let hso = parsed
         .get("hookSpecificOutput")
         .expect("response must wrap output in `hookSpecificOutput`");
@@ -70,7 +69,10 @@ fn emits_hook_specific_output_envelope() {
         .get("additionalContext")
         .and_then(|v| v.as_str())
         .expect("response must include a string `additionalContext`");
-    assert!(!ctx.is_empty(), "`additionalContext` must contain wrapped recall hits, not be empty");
+    assert!(
+        !ctx.is_empty(),
+        "`additionalContext` must contain wrapped recall hits, not be empty"
+    );
 }
 
 #[test]

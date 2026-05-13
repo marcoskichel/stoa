@@ -1,6 +1,6 @@
 //! E2E quality gate: `stoa hook install --platform claude-code --inject session-start`.
 //!
-//! Spec source: ROADMAP.md M5 — registers the SessionStart injection
+//! Spec source: ROADMAP.md M5 — registers the `SessionStart` injection
 //! hook by emitting a paste-ready settings snippet that pins the
 //! `stoa-inject-hook` binary to the `startup` matcher.
 
@@ -13,11 +13,21 @@ fn install_inject_session_start_emits_session_start_block() {
     let ws = workspace();
     let out = stoa(
         &ws,
-        &["hook", "install", "--platform", "claude-code", "--inject", "session-start"],
+        &[
+            "hook",
+            "install",
+            "--platform",
+            "claude-code",
+            "--inject",
+            "session-start",
+        ],
     );
     assert!(out.status.success(), "command failed: {}", stderr(&out));
     let body = stdout(&out);
-    assert!(body.contains("SessionStart"), "snippet must register the SessionStart hook: {body}");
+    assert!(
+        body.contains("SessionStart"),
+        "snippet must register the SessionStart hook: {body}"
+    );
     assert!(
         body.contains("stoa-inject-hook"),
         "snippet must invoke the `stoa-inject-hook` binary: {body}",
@@ -30,7 +40,14 @@ fn install_inject_unknown_kind_errors() {
     let ws = workspace();
     let out = stoa(
         &ws,
-        &["hook", "install", "--platform", "claude-code", "--inject", "user-prompt-submit"],
+        &[
+            "hook",
+            "install",
+            "--platform",
+            "claude-code",
+            "--inject",
+            "user-prompt-submit",
+        ],
     );
     assert!(
         !out.status.success(),
