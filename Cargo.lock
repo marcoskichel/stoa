@@ -1312,6 +1312,7 @@ dependencies = [
  "stoa-recall-local-chroma-sqlite",
  "thiserror",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

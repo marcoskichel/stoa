@@ -36,6 +36,13 @@ benchmarks/spike-m0/**/rust.json
 benchmarks/spike-m0/**/python.json
 benchmarks/spike-m0/**/build-*.log
 
+# Downloaded benchmark corpora — only the shell scripts ship in-tree; raw
+# data lives under `benchmarks/corpus/<name>/data/` and is fetched on
+# demand by `benchmarks/corpus/<name>.sh`.
+benchmarks/corpus/*/data/
+benchmarks/corpus/*/.version
+benchmarks/corpus/*/.commit
+
 .fastembed_cache/
 
 # Release artifacts

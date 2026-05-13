@@ -1,0 +1,37 @@
+{
+  "benchmark": "agent-leak",
+  "backend": "local-chroma-sqlite",
+  "version": "0.1.0",
+  "corpus_rev": "gh-6729179",
+  "scorer_rev": "unknown",
+  "backbone_model": "claude-haiku-4-5-20251001",
+  "hyperparams": {
+    "redactor": "stoa-capture::Redactor::with_defaults"
+  },
+  "metrics": {
+    "accuracy": 0.9099462365591398,
+    "accuracy:C1": 0.9153225806451613,
+    "accuracy:C2": 0.9181818181818182,
+    "accuracy:C3": 0.8992248062015504,
+    "accuracy:C4": 0.9180327868852459,
+    "accuracy:C5": 0.8962962962962963,
+    "accuracy:F1": 0.9141630901287554,
+    "accuracy:F2": 0.9607843137254902,
+    "accuracy:F3": 0.9,
+    "accuracy:F4": 0.8921933085501859,
+    "missed_leaks": 0.09005376344086022,
+    "missed_leaks:C1": 0.0846774193548387,
+    "missed_leaks:C2": 0.08181818181818182,
+    "missed_leaks:C3": 0.10077519379844961,
+    "missed_leaks:C4": 0.08196721311475409,
+    "missed_leaks:C5": 0.1037037037037037,
+    "missed_leaks:F1": 0.08583690987124463,
+    "missed_leaks:F2": 0.0392156862745098,
+    "missed_leaks:F3": 0.1,
+    "missed_leaks:F4": 0.10780669144981413
+  },
+  "cost_usd": 0.0,
+  "tokens_used": 0,
+  "wall_seconds": 0,
+  "timestamp": "2026-05-13T05:55:08.583498950Z"
+}
