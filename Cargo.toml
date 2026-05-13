@@ -34,7 +34,7 @@ clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 
 # Storage
-rusqlite = { version = "0.38", features = ["bundled", "chrono", "serde_json", "uuid"] }
+rusqlite = { version = "0.39", features = ["bundled", "chrono", "serde_json", "uuid"] }
 
 # Serde
 serde = { version = "1", features = ["derive"] }
