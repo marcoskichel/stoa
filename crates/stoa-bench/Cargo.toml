@@ -12,5 +12,8 @@ authors.workspace = true
 name = "stoa-bench"
 path = "src/main.rs"
 
+[dev-dependencies]
+snapbox = { workspace = true }
+
 [lints]
 workspace = true

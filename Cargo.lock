@@ -1235,6 +1235,9 @@ dependencies = [
 [[package]]
 name = "stoa-bench"
 version = "0.1.0"
+dependencies = [
+ "snapbox",
+]
 
 [[package]]
 name = "stoa-capture"
