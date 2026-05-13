@@ -26,7 +26,10 @@ That is the entire hot path. `stoa-hook` does **not**:
 It is a single static binary that opens a SQLite database in WAL mode
 (`synchronous=NORMAL`), inserts one row, and exits. The latency budget
 exists because anything heavier means the agent UI feels stuck on
-session end. The CI gate on `rust.yml` enforces it for every PR.
+session end. An opt-in latency test in
+`crates/stoa-hooks/tests/latency.rs` (run with `STOA_LATENCY_GATE=1`)
+asserts the cold-start path stays under 15 ms; the strict <10 ms
+hyperfine gate ships in M6 alongside the v0.1 tag.
 
 ## The queue
 
@@ -38,9 +41,11 @@ across a crash). Each queued row carries:
 
 - the agent + session id
 - the path to the transcript file (Claude Code writes its own jsonl
-  alongside the session)
-- a claim lease so a worker crash mid-processing leaves the row
-  unprocessed instead of lost.
+  alongside the session).
+
+The queue itself hands workers a claim lease when they `claim()` —
+if a worker crashes mid-processing, the lease expires and the row
+returns to the pool unprocessed instead of lost.
 
 ## The capture worker
 
@@ -74,31 +79,29 @@ The redactor runs a fixed set of regex patterns in `crates/stoa-capture`:
 - SSH / AWS / GPG path patterns (`~/.ssh/id_*`, `~/.aws/credentials`,
   etc.)
 
-Matched substrings are replaced with placeholders like
-`<REDACTED:aws-access-key>`. The patterns are intentionally fixed for
-v0.1 — runtime-configurable patterns ship in v0.2.
+Matched substrings are replaced with placeholders like `[REDACTED:aws]`
+or `[REDACTED:stripe]`. The patterns are intentionally fixed for v0.1 —
+runtime-configurable patterns ship in v0.2.
 
 !!! warning "Pre-redaction transcripts"
     The transcript file the agent writes is pre-redaction. Only the
     JSONL under `sessions/` has the redactor applied. Never paste a raw
     Claude Code transcript into an issue without checking it manually.
 
-## Install + uninstall
-
-Register the hook:
+## Install
 
 ```bash
 stoa hook install --platform claude-code
 ```
 
-This writes a `Stop` / `SessionEnd` hook entry into Claude Code's
-config pointing at the absolute path of the `stoa-hook` binary.
+This **prints** a JSON snippet for Claude Code's settings.json. v0.1
+deliberately does not mutate your config — paste the printed snippet
+into `~/.config/claude-code/settings.json` (or your platform's
+equivalent) manually. The snippet references `stoa-hook` by bare name,
+so make sure `stoa-hook` is on your `PATH`.
 
-Remove the hook:
-
-```bash
-stoa hook uninstall --platform claude-code
-```
+To remove the hook later, delete the matching entries from the same
+settings file you pasted into.
 
 ## Audit trail
 
@@ -106,7 +109,7 @@ Every capture event is appended to `.stoa/audit.log` as a single JSON
 line:
 
 ```json
-{"ts":"2026-05-13T01:12:34Z","event":"stoa.capture","session_id":"01JC...","bytes":4821}
+{"ts":"2026-05-13T01:12:34Z","event":"transcript.captured","session_id":"01JC...","bytes":4821}
 ```
 
 The log is append-only; the daemon never rewrites prior entries.

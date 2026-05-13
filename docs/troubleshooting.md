@@ -64,19 +64,21 @@ Then check the audit log:
 tail -n 5 .stoa/audit.log
 ```
 
-You should see one `stoa.capture` event per processed row.
+You should see one `transcript.captured` event per processed row.
+(Injection events use the `stoa.inject` prefix — the two flows have
+different event names.)
 
 ## `stoa query` returns no hits
 
 Three causes are common:
 
-1. **Index never built.** Run `stoa rebuild`. This regenerates
+1. **Index never built.** Run `stoa index rebuild`. This regenerates
    `.stoa/recall.db` and `.stoa/vectors/` from `wiki/`, `raw/`, and
    `sessions/`.
 2. **Embedding model not downloaded.** On first run Stoa fetches
    `bge-small-en-v1.5`. Watch for network errors in daemon stderr. If
-   the model is unavailable, fall back to BM25-only by re-running
-   `stoa init --no-embeddings` (warning: this resets the index).
+   the model is unavailable, start a new workspace with
+   `stoa init --no-embeddings` to fall back to BM25-only.
 3. **Query is below the relevance floor.** SessionStart injection skips
    anything below a configured floor to avoid noise. `stoa query`
    itself does not apply the floor; if `query` returns 0 hits, the
@@ -95,13 +97,20 @@ relevant for the session's cwd / git remote / recent wiki pages. This
 is the intended behavior — Stoa does not inject when it has no signal.
 
 If `hits>0` but you do not see the `<stoa-memory>` block in the agent's
-context: confirm the hook is actually registered:
+context: confirm the hook is actually registered. `stoa hook install
+--platform claude-code --inject session-start` only **prints** the
+snippet; the snippet must be pasted into your Claude Code
+`settings.json` and the `stoa-inject-hook` binary must be on `$PATH`:
+
+```bash
+which stoa-inject-hook         # must resolve
+```
+
+Re-print the snippet for reference:
 
 ```bash
 stoa hook install --platform claude-code --inject session-start
 ```
-
-(`install` is idempotent — safe to re-run.)
 
 ## "Injected snippet contains `<stoa-memory>` inside a snippet body"
 

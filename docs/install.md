@@ -28,17 +28,22 @@ Each release tag publishes tarballs for all five targets via the
 The v0.1 tag has not landed yet. Install directly from `main`:
 
 ```bash
-cargo install --git https://github.com/marcoskichel/stoa stoa-cli
+cargo install --git https://github.com/marcoskichel/stoa \
+    stoa-cli stoa-hooks stoa-inject-hooks
 ```
 
-This compiles and installs the `stoa` and `stoa-hook` binaries into
-`~/.cargo/bin`. Add that directory to `PATH` if rustup did not do it
-already.
+This compiles three binaries into `~/.cargo/bin`:
+
+- `stoa` — the CLI.
+- `stoa-hook` — capture hook fired by `Stop` / `SessionEnd`.
+- `stoa-inject-hook` — injection hook fired by `SessionStart`.
+
+Add `~/.cargo/bin` to `PATH` if rustup did not do it already.
 
 ## Stable (after v0.1 ships)
 
 ```bash
-cargo install stoa-cli
+cargo install stoa-cli stoa-hooks stoa-inject-hooks
 ```
 
 ## From a release tarball
@@ -53,10 +58,12 @@ tar -xzf stoa-x86_64-unknown-linux-gnu.tar.gz
 sudo install -m 0755 stoa stoa-hook /usr/local/bin/
 ```
 
-The tarball contains the `stoa` CLI and the `stoa-hook` capture binary.
-The `stoa-inject-hook` SessionStart binary ships in the same tarball
-once the [release pipeline tracks it](https://github.com/marcoskichel/stoa/blob/main/ROADMAP.md)
-(M6).
+The tarball currently contains the `stoa` CLI and the `stoa-hook`
+capture binary. The `stoa-inject-hook` SessionStart binary will ship in
+the same tarball once the
+[release pipeline tracks it](https://github.com/marcoskichel/stoa/blob/main/ROADMAP.md)
+— scheduled for M6 alongside the v0.1 tag. Until then, install
+`stoa-inject-hook` via the `cargo install` invocation above.
 
 ## Building from source
 
@@ -72,10 +79,13 @@ Use this when you are iterating on Stoa itself.
 
 ## Verify
 
-```console
-$ stoa --version
-stoa 0.1.0
+```bash
+stoa --version
 ```
+
+You should see `stoa <version>` printed (the exact version depends on
+your install source — `main` shows a pre-release identifier; tagged
+releases show `0.X.Y`).
 
 ## Next
 

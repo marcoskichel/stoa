@@ -8,7 +8,7 @@ entities and decisions, and surfaced back into the next session by
 meaning — through the agent's existing hook surface.
 
 The pattern that makes Stoa load-bearing rather than another retrieval
-shim is the **three-layer split**:
+shim is the **Wiki / Recall split**:
 
 - **Layer 1 — Wiki.** Markdown files under `wiki/`, `raw/`, and
   `sessions/`. Human-readable, Obsidian-compatible, git-trackable.
@@ -39,7 +39,8 @@ shim is the **three-layer split**:
 Two patterns are non-negotiable across the design:
 
 1. **The Wiki / Recall split.** Layer 2 is always rebuildable from
-   Layer 1. This is why the index is local-first and disposable.
+   Layer 1 via `stoa index rebuild`. This is why the index is
+   local-first and disposable.
 2. **Hook → queue → worker.** Hooks complete in **<10 ms p95** — they
    insert one row into `.stoa/queue.db` and return. All heavy work
    (redaction, embedding, harvest, crystallize) runs in async workers

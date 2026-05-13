@@ -5,24 +5,25 @@ both call into the same `RecallBackend` trait to find relevant content.
 
 ## The trait
 
-```rust
-pub trait RecallBackend {
-    fn search(&self, query: &str, k: usize) -> Result<Vec<Hit>>;
-    fn index(&self, doc: &Document) -> Result<()>;
-    fn delete(&self, id: &Id) -> Result<()>;
-}
+The full signature lives in `crates/stoa-recall/src/traits.rs`. The
+conceptual surface is:
 
-pub struct Hit {
-    pub id: Id,
-    pub source_path: PathBuf,
-    pub score: f32,
-    pub streams: Vec<Stream>,    // which streams matched
-}
-```
+- `index_page` — index one wiki page.
+- `index_session` — index one redacted session JSONL.
+- `search` — hybrid query with filters + a per-call stream selection;
+  returns ranked `Hit`s with `source_path`, `doc_id`, `score`, and
+  per-stream provenance.
+- `remove` — drop a doc from the index by id.
+- `health_check` + `graph_neighbors` + `quality_suite` — optional,
+  with default `Unimplemented` impls so a minimal backend can ignore
+  them.
 
-Every recall implementation produces `Hit`s with `source_path` always
-resolving to a real file on disk. That guarantee makes Stoa's output
-verifiable — the agent can quote by path and a human can open it.
+The trait is `async` and `Send + Sync + 'static` so backends can be
+shared across worker tasks behind `Arc<dyn RecallBackend>`.
+
+Every `Hit` carries a `source_path` that resolves to a real file on
+disk. That guarantee makes Stoa's output verifiable — the agent can
+quote by path and a human can open it.
 
 ## The default backend: `LocalChromaSqliteBackend`
 
@@ -30,15 +31,9 @@ verifiable — the agent can quote by path and a human can open it.
 in parallel and fuses with **reciprocal rank fusion** (RRF, k=60):
 
 ```
-                        ┌──────────────────────┐
-   query  ─────────────►│  BM25 (SQLite FTS5)   │──┐
-                        └──────────────────────┘  │
-                        ┌──────────────────────┐  │
-                ───────►│  Vector (ChromaDB)    │──┼──► RRF fusion ──► ranked hits
-                        └──────────────────────┘  │
-                        ┌──────────────────────┐  │
-                ───────►│  Graph (typed KG)     │──┘
-                        └──────────────────────┘
+              ┌─► BM25 (SQLite FTS5)   ─┐
+   query ─────┼─► Vector (ChromaDB)    ─┼─► RRF fusion ─► ranked hits
+              └─► Graph (typed KG)     ─┘
 ```
 
 - **BM25** lives in `.stoa/recall.db` (SQLite FTS5 in the same file as
@@ -71,13 +66,14 @@ Flags:
 
 Indexing happens two ways:
 
-1. **Live.** The daemon watches `wiki/` for changes (`notify` crate)
-   and re-indexes any page whose mtime changes. New session JSONL files
-   are also indexed when the capture worker writes them.
-2. **Rebuild.** `stoa index rebuild` (or `stoa rebuild`) tears down
-   `.stoa/recall.db` and `.stoa/vectors/` and rebuilds them from the
-   source-of-truth files under `wiki/`, `raw/`, and `sessions/`. This
-   is the load-bearing invariant: nothing lives only in the index.
+1. **Live.** The daemon watches `wiki/` for changes (via
+   `notify-debouncer-full`, which wraps `notify`) and re-indexes any
+   page whose mtime changes. A separate recall-drain worker indexes
+   new session JSONL files after the capture worker writes them.
+2. **Rebuild.** `stoa index rebuild` tears down `.stoa/recall.db` and
+   `.stoa/vectors/` and rebuilds them from the source-of-truth files
+   under `wiki/`, `raw/`, and `sessions/`. This is the load-bearing
+   invariant: nothing lives only in the index.
 
 ## Cold-start budget
 
@@ -109,8 +105,8 @@ Numbers are published per-backend under
 
 The `RecallBackend` trait is the seam for community adapters. Future
 backends (Qdrant, LanceDB, pure-Rust embedding stack) implement the
-same three-method interface; nothing in the rest of Stoa depends on
-the concrete backend.
+same trait; nothing in the rest of Stoa depends on the concrete
+backend type.
 
 ## Next
 

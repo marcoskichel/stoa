@@ -33,10 +33,12 @@ Every wiki page is a markdown file with YAML frontmatter:
 ```markdown
 ---
 id: ent-redis
+title: Redis
+status: active
 kind: entity
 type: library
-created: 2026-05-12
-updated: 2026-05-13
+created: 2026-05-12T00:00:00Z
+updated: 2026-05-13T00:00:00Z
 relationships:
   - type: uses
     target: ent-acme-cache
@@ -56,19 +58,25 @@ In-memory data store. Used for caching session tokens and rate limiting.
 - sessions/01JC...
 ```
 
-Required fields:
+Required on every page:
 
 - `id` — globally unique, kebab-case, prefixed by kind (`ent-`,
   `con-`, `syn-`).
+- `title` — human-readable display name.
+- `status` — lifecycle marker (`active`, `archived`, etc. — see
+  `STOA.md`).
 - `kind` — one of `entity`, `concept`, `synthesis`.
-- `type` — must be drawn from `STOA.md`'s `entity_types` /
-  `concept_types` vocabulary.
-- `created`, `updated` — ISO 8601 dates.
+- `created`, `updated` — RFC 3339 / ISO 8601 timestamps.
+
+Required for `kind: entity`:
+
+- `type` — must be drawn from `STOA.md`'s `entity_types` vocabulary.
 
 Optional:
 
 - `relationships` — list of `{type, target}` pairs; `type` must be one
   of `STOA.md`'s `relationship_types`; `target` must be a valid `id`.
+- For `kind: synthesis`: `inputs:` and `question:`.
 
 ## Editing pages
 
@@ -85,8 +93,10 @@ stoa read ent-redis
 ```
 
 `stoa write` is idempotent: re-writing an existing id replaces the
-file atomically (write-temp + rename). The `updated` field is bumped
-automatically.
+file in place. The `updated` field is bumped automatically. (Atomic
+write-temp + rename is planned but not yet shipped — a crash
+mid-write can truncate the page; see `crates/stoa-cli/src/write.rs`
+for the current behavior.)
 
 ## Validation
 
@@ -100,8 +110,8 @@ stoa schema --check   # fail on any schema violation in wiki/
 ## index.md and log.md
 
 Both files are **auto-generated** under `wiki/` — never edit them by
-hand. They are rewritten whenever the daemon (or `stoa rebuild`) sees a
-new wiki page.
+hand. They are rewritten whenever the daemon (or `stoa index rebuild`)
+sees a new wiki page.
 
 ## Default schema
 

@@ -1,6 +1,6 @@
 site_name: Stoa
 site_description: An open-core knowledge + memory system for AI agents.
-site_url: https://kichelm.github.io/stoa/
+site_url: https://marcoskichel.github.io/stoa/
 repo_name: marcoskichel/stoa
 repo_url: https://github.com/marcoskichel/stoa
 edit_uri: edit/main/docs/
@@ -71,7 +71,7 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/marcoskichel/stoa
 
-# Strict mode is enforced from the command line via `mkdocs build --strict`
-# (see `just docs`). Treating warnings as errors locally keeps broken
-# links and undefined nav entries from drifting into the docs site.
-strict: false
+# Strict mode treats warnings as errors so broken links and undefined
+# nav entries cannot drift in unnoticed. The `--strict` CLI flag in
+# `just docs` reinforces the same gate (belt-and-braces).
+strict: true
