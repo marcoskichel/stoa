@@ -98,6 +98,21 @@ impl IpcBackend {
         &self.queue_path
     }
 
+    /// Re-enqueue a `recall.request` row so the daemon's drainer (or a
+    /// future sidecar liveness recovery) re-attempts the work. Without
+    /// this the BM25 stream + the vector / KG stream silently diverge
+    /// — BM25 forgets the doc, the sidecar's view never updates.
+    fn reenqueue_remove(&self, doc_id: &str, args: &serde_json::Value) -> Result<(), RecallError> {
+        let payload = serde_json::json!({
+            "method": "remove",
+            "args": args,
+        });
+        let session_id = format!("retry:remove:{doc_id}:{}", Uuid::new_v4());
+        self.queue
+            .insert_lane(REQUEST_LANE, "recall.remove.retry", &session_id, &payload)
+            .map_err(|e| RecallError::Other(format!("re-enqueue remove: {e}")))
+    }
+
     /// Send `payload` on the request lane, await the response, return the
     /// raw `result` JSON.
     async fn round_trip(
@@ -206,10 +221,11 @@ impl RecallBackend for IpcBackend {
         self.bm25.remove(doc_id).await?;
         let args = serde_json::json!({"doc_id": doc_id});
         if let Err(e) = self
-            .round_trip(REMOVE_EVENT, "remove", args, DEFAULT_INDEX_TIMEOUT)
+            .round_trip(REMOVE_EVENT, "remove", args.clone(), DEFAULT_INDEX_TIMEOUT)
             .await
         {
-            tracing::warn!(error = %e, "python sidecar remove skipped");
+            tracing::warn!(error = %e, "python sidecar remove failed; re-enqueueing");
+            self.reenqueue_remove(doc_id, &args)?;
         }
         Ok(())
     }
