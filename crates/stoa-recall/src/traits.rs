@@ -79,6 +79,14 @@ pub enum RecallError {
     /// Catch-all for backend-specific failures with a descriptive message.
     #[error("backend error: {0}")]
     Other(String),
+
+    /// The backend has not implemented this method yet (stub).
+    ///
+    /// Used by methods like `graph_neighbors` and `quality_suite` that
+    /// land in M5+; backends MAY return this immediately so callers
+    /// can probe the surface area without implementing every leaf.
+    #[error("not yet implemented: {0}")]
+    Unimplemented(&'static str),
 }
 
 /// The contract every recall backend implements.
@@ -120,4 +128,25 @@ pub trait RecallBackend: Send + Sync + 'static {
     /// Liveness check. Returns shape-free JSON the caller can log; the
     /// trait only requires that the call succeed in <500 ms when healthy.
     async fn health_check(&self) -> Result<serde_json::Value, RecallError>;
+
+    /// Return up to `k` doc ids reachable from `doc_id` along KG edges.
+    ///
+    /// Default impl returns [`RecallError::Unimplemented`] — the M4
+    /// backends ship without graph traversal; M5 wires it via the KG
+    /// tables. Implementing this is opt-in per backend.
+    async fn graph_neighbors(
+        &self,
+        _doc_id: &str,
+        _k: usize,
+    ) -> Result<Vec<String>, RecallError> {
+        Err(RecallError::Unimplemented("RecallBackend::graph_neighbors"))
+    }
+
+    /// Run the canonical recall quality suite (`LongMemEval` subset for M5).
+    ///
+    /// Default impl returns [`RecallError::Unimplemented`]. Backends opt
+    /// in once they want to participate in `stoa-bench` rotations.
+    async fn quality_suite(&self) -> Result<serde_json::Value, RecallError> {
+        Err(RecallError::Unimplemented("RecallBackend::quality_suite"))
+    }
 }
