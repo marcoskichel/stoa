@@ -157,13 +157,18 @@ release target:
     case "$triple" in *windows*) ext=".exe" ;; esac
     tar -czf "dist/stoa-${triple}.tar.gz" \
         -C "target/${triple}/release" \
-        "stoa${ext}" "stoa-hook${ext}"
+        "stoa${ext}" "stoa-hook${ext}" "stoa-inject-hook${ext}"
     ls -lh "dist/stoa-${triple}.tar.gz"
 
 # Verify a release tarball contains every binary the install docs
-# promise — the gate that protects v0.1 release tarballs from quietly
-# dropping a binary (capture, inject, or CLI). Builds the tarball via
-# `just release <target>` and then inspects its contents.
+# promise (`stoa`, `stoa-hook`, `stoa-inject-hook`) — the gate that
+# protects v0.1 release tarballs from quietly dropping a binary.
+# Builds the tarball via `just release <target>` and then inspects
+# its contents.
+#
+# NOTE: not yet wired into `.github/workflows/release.yml` — release
+# authors must run this locally before tagging v0.X.Y. Workflow
+# integration is a deferred follow-up.
 release-verify target:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -179,7 +184,7 @@ release-verify target:
     ext=""
     case "$triple" in *windows*) ext=".exe" ;; esac
     tarball="dist/stoa-${triple}.tar.gz"
-    expected=("stoa${ext}" "stoa-hook${ext}")
+    expected=("stoa${ext}" "stoa-hook${ext}" "stoa-inject-hook${ext}")
     contents="$(tar -tzf "$tarball")"
     errors=0
     for bin in "${expected[@]}"; do
