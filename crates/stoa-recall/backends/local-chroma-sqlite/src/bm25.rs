@@ -112,7 +112,9 @@ impl Bm25Backend {
     ///
     /// Empty queries return an empty `Vec` (FTS5 errors on bare-empty
     /// `MATCH`). Tokens that fail FTS5's quoting rules are wrapped
-    /// defensively with double quotes.
+    /// defensively with double quotes. `k` is clamped to `i64::MAX`
+    /// rather than silently falling back to 10 when it overflows
+    /// `i64`.
     pub fn search_bm25(&self, query: &str, k: usize) -> Result<Vec<Hit>, Bm25Error> {
         let safe = sanitize_query(query);
         if safe.is_empty() {
@@ -120,7 +122,7 @@ impl Bm25Backend {
         }
         run_with_conn(&self.conn, |c| {
             let mut stmt = c.prepare(SEARCH_SQL)?;
-            let limit = i64::try_from(k).unwrap_or(10);
+            let limit = clamp_k_to_i64(k);
             let mut rows = stmt.query(params![safe, limit])?;
             let mut out = Vec::new();
             while let Some(row) = rows.next()? {
@@ -271,7 +273,7 @@ fn search_blocking(
     }
     run_with_conn(conn, |c| {
         let mut stmt = c.prepare(SEARCH_SQL)?;
-        let limit = i64::try_from(k).unwrap_or(10);
+        let limit = clamp_k_to_i64(k);
         let mut rows = stmt.query(params![safe, limit])?;
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
@@ -279,6 +281,13 @@ fn search_blocking(
         }
         Ok(out)
     })
+}
+
+/// Clamp `k` to `i64::MAX` so a `usize` larger than `i64::MAX`
+/// (theoretical on 64-bit, plausible if a caller passes
+/// `usize::MAX` as a sentinel) doesn't silently fall back to 10.
+fn clamp_k_to_i64(k: usize) -> i64 {
+    i64::try_from(k).unwrap_or(i64::MAX)
 }
 
 #[cfg(test)]
