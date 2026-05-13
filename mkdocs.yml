@@ -1,0 +1,77 @@
+site_name: Stoa
+site_description: An open-core knowledge + memory system for AI agents.
+site_url: https://kichelm.github.io/stoa/
+repo_name: marcoskichel/stoa
+repo_url: https://github.com/marcoskichel/stoa
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; Marcos Kichel and contributors. MIT licensed.
+
+docs_dir: docs
+# Resolved relative to this file (the repo root), so output lands in
+# `<repo>/target/docs-site` regardless of the cwd the build is invoked
+# from. `target/` is gitignored.
+site_dir: target/docs-site
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Quickstart: quickstart.md
+  - Wiki schema: schema.md
+  - Capture pipeline: capture.md
+  - Recall: recall.md
+  - SessionStart injection: injection.md
+  - Troubleshooting: troubleshooting.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/marcoskichel/stoa
+
+# Strict mode is enforced from the command line via `mkdocs build --strict`
+# (see `just docs`). Treating warnings as errors locally keeps broken
+# links and undefined nav entries from drifting into the docs site.
+strict: false
