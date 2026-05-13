@@ -14,6 +14,7 @@ mod daemon;
 mod hook;
 mod index;
 mod init;
+mod inject;
 mod page;
 mod query;
 mod read;

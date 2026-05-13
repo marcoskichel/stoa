@@ -4,6 +4,7 @@ members = [
     "crates/stoa-core",
     "crates/stoa-cli",
     "crates/stoa-hooks",
+    "crates/stoa-inject-hooks",
     "crates/stoa-queue",
     "crates/stoa-capture",
     "crates/stoa-recall",

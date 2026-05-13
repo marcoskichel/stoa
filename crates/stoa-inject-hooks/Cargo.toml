@@ -1,6 +1,6 @@
 [package]
-name = "stoa-cli"
-description = "Stoa command-line interface."
+name = "stoa-inject-hooks"
+description = "Stoa SessionStart injection hook (recall-driven additionalContext)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,35 +8,30 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[lib]
+name = "stoa_inject_hooks"
+path = "src/lib.rs"
+
 [[bin]]
-name = "stoa"
+name = "stoa-inject-hook"
 path = "src/main.rs"
 
 [dependencies]
-clap = { workspace = true }
 stoa-core = { path = "../stoa-core", version = "0.1.0" }
-stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
-stoa-capture = { path = "../stoa-capture", version = "0.1.0" }
 stoa-recall = { path = "../stoa-recall", version = "0.1.0" }
 stoa-recall-local-chroma-sqlite = { path = "../stoa-recall/backends/local-chroma-sqlite", version = "0.1.0" }
 anyhow = { workspace = true }
-serde_yaml = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 tracing = { workspace = true }
-notify = { workspace = true }
-notify-debouncer-full = { workspace = true }
 
 [dev-dependencies]
-snapbox = { workspace = true }
-trycmd = { workspace = true }
 assert_fs = { workspace = true }
-serde_yaml = { workspace = true }
-stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
-stoa-inject-hooks = { path = "../stoa-inject-hooks", version = "0.1.0" }
+snapbox = { workspace = true }
 serde_json = { workspace = true }
+stoa-cli = { path = "../stoa-cli", version = "0.1.0" }
 
 [lints]
 workspace = true
