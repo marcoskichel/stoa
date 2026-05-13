@@ -10,9 +10,12 @@
 //!            "streams_matched": ["bm25"], "snippet": "...", "metadata": {}}]}
 //! ```
 
-use std::path::PathBuf;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow};
+use chrono::{SecondsFormat, Utc};
 use stoa_recall::{Filters, Hit, RecallBackend, Stream, StreamSet};
 use stoa_recall_local_chroma_sqlite::Bm25Backend;
 
@@ -24,12 +27,54 @@ pub(crate) fn run(query: &str, json: bool, streams: &[String], k: usize) -> anyh
     let ws = Workspace::current().context("locating Stoa workspace")?;
     let streamset = build_stream_set(streams)?;
     let hits = search(&ws, query, k, streamset)?;
+    let _ignored = audit_log_query(&ws, query, k, streamset, hits.len());
     if json {
         emit_json(&hits)?;
     } else {
         emit_text(&hits);
     }
     Ok(())
+}
+
+/// Append one structured row to `.stoa/audit.log` per ARCHITECTURE §10.
+///
+/// Failures here MUST NOT fail the user-facing query — the audit write
+/// is a best-effort observability hook. Callers swallow the result.
+fn audit_log_query(
+    ws: &Workspace,
+    query: &str,
+    k: usize,
+    streams: StreamSet,
+    hit_count: usize,
+) -> std::io::Result<()> {
+    let log_path = ws.root.join(".stoa").join("audit.log");
+    let line = build_audit_line(query, k, streams, hit_count);
+    append_audit_line(&log_path, &line)
+}
+
+fn build_audit_line(query: &str, k: usize, streams: StreamSet, hit_count: usize) -> String {
+    let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let stream_names: Vec<&str> = streams.iter().map(Stream::as_str).collect();
+    let entry = serde_json::json!({
+        "ts": ts,
+        "event": "stoa.query",
+        "query": query,
+        "k": k,
+        "streams": stream_names,
+        "hits": hit_count,
+    });
+    format!("{entry}\n")
+}
+
+fn append_audit_line(log_path: &Path, line: &str) -> std::io::Result<()> {
+    if let Some(parent) = log_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)?;
+    f.write_all(line.as_bytes())
 }
 
 fn build_stream_set(streams: &[String]) -> anyhow::Result<StreamSet> {
