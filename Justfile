@@ -84,6 +84,19 @@ file-length:
 check-changelog:
     ./scripts/check-changelog.sh
 
+# Docs site: build with --strict so broken links or undefined nav
+# entries fail the build. Uses the `docs` uv group; mkdocs.yml lives
+# at the repo root, content under docs/. Output lands in
+# `target/docs-site` (set in mkdocs.yml, gitignored).
+docs:
+    cd python && uv run --group docs mkdocs build --strict \
+        --config-file ../mkdocs.yml
+
+# Live-reload preview at http://127.0.0.1:8000 (authoring loop).
+docs-serve:
+    cd python && uv run --group docs mkdocs serve \
+        --config-file ../mkdocs.yml --strict
+
 deny:
     cargo deny --all-features check
 
@@ -172,7 +185,7 @@ ci-rust: lint lint-docs file-length check-changelog
     cargo test --workspace --locked
     just e2e
 
-ci-python:
+ci-python: docs
     cd python && uv sync --all-groups --locked
     cd python && uv run ruff check .
     cd python && uv run ruff format --check .

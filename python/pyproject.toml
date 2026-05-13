@@ -32,6 +32,14 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=5.0",
 ]
+docs = [
+    # Upper-bounded to keep MkDocs 2.0 (Feb 2026 rewrite) out of automated
+    # upgrades. The 2.0 line drops the plugin system, ships unlicensed, and
+    # has no migration path; mkdocs-material 9.x targets MkDocs 1.x only.
+    # See https://squidfunk.github.io/mkdocs-material/blog/2026/02/18/mkdocs-2.0/.
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5,<10",
+]
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
