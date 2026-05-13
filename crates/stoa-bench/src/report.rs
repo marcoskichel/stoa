@@ -16,8 +16,8 @@ use crate::{error::BenchError, result::BenchmarkResult};
 /// that path.
 pub(crate) fn write_markdown(result: &BenchmarkResult, dir: &Path) -> Result<(), BenchError> {
     let md = render(result);
-    let filename = format!("{}-{}-{}.md", result.version, result.backend, result.benchmark);
-    std::fs::write(dir.join(filename), md)?;
+    let stem = crate::run::result_filename_stem(result);
+    std::fs::write(dir.join(format!("{stem}.md")), md)?;
     Ok(())
 }
 
@@ -117,7 +117,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let result = sample_result();
         write_markdown(&result, tmp.path()).unwrap();
-        let expected = tmp.path().join("0.1.0-test-backend-longmemeval.md");
+        let expected = tmp.path().join("v0.1-test-backend-longmemeval.md");
         assert!(expected.exists());
     }
 }

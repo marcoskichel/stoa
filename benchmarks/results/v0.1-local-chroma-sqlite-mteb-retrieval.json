@@ -1,0 +1,34 @@
+{
+  "benchmark": "mteb-retrieval",
+  "backend": "local-chroma-sqlite",
+  "version": "0.1.0",
+  "corpus_rev": "beir-scifact+nfcorpus+fiqa@2.1.0:scifact@cf10ab6856b15b0e670ef8ae5dae4e266c12d035;nfcorpus@52ac3f19d3449632d9f00aab0ad34a110fc03816;fiqa@5e59eeb3a7df6b85882112b747008547c21587ea",
+  "scorer_rev": "unknown",
+  "backbone_model": "claude-haiku-4-5-20251001",
+  "hyperparams": {
+    "k": 10,
+    "streams": "bm25"
+  },
+  "metrics": {
+    "ndcg@10": 0.09360767401853116,
+    "ndcg@10:fiqa": 0.026819952085169293,
+    "ndcg@10:nfcorpus": 0.20732464582789903,
+    "ndcg@10:scifact": 0.0466784241425252,
+    "recall@1": 0.03605463856492718,
+    "recall@10": 0.054680782115844234,
+    "recall@100": 0.059670306995126994,
+    "recall@100:fiqa": 0.029501028806584364,
+    "recall@100:nfcorpus": 0.1036765588454633,
+    "recall@100:scifact": 0.04583333333333333,
+    "recall@10:fiqa": 0.025900205761316877,
+    "recall@10:nfcorpus": 0.09230880725288249,
+    "recall@10:scifact": 0.04583333333333333,
+    "recall@1:fiqa": 0.018647119341563788,
+    "recall@1:nfcorpus": 0.043683463019884405,
+    "recall@1:scifact": 0.04583333333333333
+  },
+  "cost_usd": 0.0,
+  "tokens_used": 0,
+  "wall_seconds": 618,
+  "timestamp": "2026-05-13T07:03:50.356856550Z"
+}

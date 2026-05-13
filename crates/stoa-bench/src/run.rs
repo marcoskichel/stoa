@@ -130,8 +130,20 @@ fn write_results(results: Vec<BenchmarkResult>, output: Option<&Path>) -> Result
 }
 
 fn write_to_file(result: &BenchmarkResult, json: &str, dir: &Path) -> Result<(), BenchError> {
-    let filename = format!("{}-{}-{}.json", result.version, result.backend, result.benchmark);
-    std::fs::write(dir.join(&filename), json)?;
+    let stem = result_filename_stem(result);
+    std::fs::write(dir.join(format!("{stem}.json")), json)?;
     report::write_markdown(result, dir)?;
     Ok(())
+}
+
+/// Filename stem for published results: `v<major>.<minor>-<backend>-<benchmark>`.
+///
+/// Matches the convention enforced in `benchmarks/results/README.md`.
+/// Patch-level changes never warrant a new published file — re-runs at a
+/// patch bump overwrite the same artifact.
+pub(crate) fn result_filename_stem(result: &BenchmarkResult) -> String {
+    let mut parts = result.version.split('.');
+    let major = parts.next().unwrap_or("0");
+    let minor = parts.next().unwrap_or("0");
+    format!("v{major}.{minor}-{}-{}", result.backend, result.benchmark)
 }
