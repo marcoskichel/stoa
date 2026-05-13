@@ -1,54 +1,38 @@
 //! Stoa memory + recall benchmark runners.
 //!
-//! Hosts the v0.1 suite and post-MVP runners. See `benchmarks/README.md`
+//! Hosts the v0.1 suite (`LongMemEval`, `MemoryAgentBench`, `MEMTRACK`, `BEAM`,
+//! `AgentLeak`, `MTEB`-subset) and post-MVP runners. See `benchmarks/README.md`
 //! for the full plan; per-benchmark intent + cost lives in
 //! `benchmarks/<name>/README.md`.
-//!
-//! M4 ships the `LongMemEval` surface — `--dry-run` is the CI gate (no
-//! dataset required); a real run reads `benchmarks/longmemeval/data/`
-//! (gitignored) and writes scored hypotheses.
 
-mod longmemeval;
+mod adapter;
+mod adapters;
+mod backends;
+mod cli;
+mod error;
+mod result;
+mod run;
 
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
-/// Stoa benchmark runner.
-#[derive(Parser, Debug)]
-#[command(name = "stoa-bench", version, about, long_about = None)]
-struct Cli {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    /// `LongMemEval` recall@k benchmark.
-    Longmemeval(longmemeval::Args),
-}
-
-fn main() -> ExitCode {
-    let cli = Cli::parse();
-    match dispatch(cli) {
+#[tokio::main]
+async fn main() -> ExitCode {
+    let cli = cli::Cli::parse();
+    match run::run(&cli).await {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            report_error(&err);
+        Err(e) => {
+            report_error(&e);
             ExitCode::FAILURE
         },
     }
 }
 
-fn dispatch(cli: Cli) -> anyhow::Result<()> {
-    match cli.command {
-        Command::Longmemeval(args) => longmemeval::run(&args),
-    }
-}
-
 #[expect(
     clippy::print_stderr,
-    reason = "CLI surfaces dispatch failures via stderr."
+    reason = "CLI binary — errors must reach the terminal"
 )]
-fn report_error(err: &anyhow::Error) {
-    eprintln!("error: {err:#}");
+fn report_error(e: &error::BenchError) {
+    eprintln!("stoa-bench: {e}");
 }

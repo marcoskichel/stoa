@@ -4,17 +4,34 @@
 
 ## Source
 
-[MEMTRACK: Evaluating Long-Horizon Memory Tracking in Software Engineering Workflows](https://arxiv.org/abs/2510.01353) — Deshpande et al., Patronus AI; NeurIPS SEA Workshop 2025. [Patronus announcement post](https://www.patronus.ai/blog/memtrack).
+- Paper: [MEMTRACK](https://arxiv.org/abs/2510.01353) — Deshpande, Gangal et al., Patronus AI; NeurIPS 2025 SEA Workshop.
+- Blog: [Patronus announcement post](https://www.patronus.ai/blog/memtrack).
+- Dataset: **No HuggingFace card published.** Distributed via Google Drive (file ID `1ymMXmOIhCUcwC1WKOW8kioZgeYyrt-qe`). See `benchmarks/corpus/memtrack.sh` — requires `gdown`.
+- Scorer: **No public scorer repo.** Implement from paper Section IV: Correctness via partial/approximate match + LLM-as-judge; Efficiency = tool-call count; Redundancy = unnecessary re-fetches.
 
 ## What it measures
 
-47 expert-curated scenarios simulating a software organization's event timeline across Slack, Linear, and Git. Three metrics:
+47 expert-curated instances simulating a software organization's event timeline across Slack, Linear, and Gitea (self-hosted Git in a Docker container — not GitHub). Three metrics:
 
 1. **Correctness** — did the agent recall the right state.
 2. **Efficiency** — number of tool calls used.
 3. **Redundancy** — unnecessary re-fetching.
 
-Scenarios include cross-platform dependencies and explicit conflicts (e.g. Linear ticket status contradicts a Slack message). Best published score: 60% correctness (GPT-5).
+Scenarios include cross-platform dependencies and explicit conflicts (e.g. Linear ticket status contradicts a Slack message). Best published score: GPT-5 at 60% Correctness. The paper explicitly notes memory backends (Mem0, Zep) do not significantly improve over the no-memory baseline.
+
+## Schema
+
+Each instance is `(timeline, [(Q1, A1), ..., (Qn, An)])` where the timeline is a sequence of platform-typed events. Average 3.2 questions per instance (max 5). Average 39.9 events per instance (max 115). Average timeline span 878 hours.
+
+Event fields are platform-heterogeneous:
+
+| Platform | Required fields | Notes |
+|---|---|---|
+| `slack` | `timestamp`, `channel`, `sender`, `message` | Flat message events |
+| `linear` | `timestamp`, `title`, `description`, `team`, `priority`, `lead`, `attached_resources` | Structured issue events |
+| `gitea` | `timestamp`, `repo`, `event_type`, `author`, `message` | Filesystem-backed via Gitea container |
+
+Questions are injected **sequentially** — the agent cannot see all `n` questions upfront.
 
 ## Why for Stoa
 

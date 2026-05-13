@@ -4,18 +4,24 @@
 
 ## Source
 
-[MemoryAgentBench: A Benchmark for Agentic Memory in Long-Context Reasoning](https://arxiv.org/abs/2507.05257) — Hu, Wang, McAuley; ICLR 2026. Dataset on HuggingFace, MIT/CC-BY-4.0.
+- Paper: [Evaluating Memory in LLM Agents via Incremental Multi-Turn Interactions](https://arxiv.org/abs/2507.05257) — HUST AI lab, ICLR 2026.
+- Dataset: [`ai-hyz/MemoryAgentBench`](https://huggingface.co/datasets/ai-hyz/MemoryAgentBench) on HuggingFace.
+- Scorer: [github.com/HUST-AI-HYZ/MemoryAgentBench](https://github.com/HUST-AI-HYZ/MemoryAgentBench).
 
 ## What it measures
 
-Four competencies across 2,071 questions, contexts spanning 103K–1.44M tokens:
+Four top-level HuggingFace splits map 1:1 to four competencies:
 
-1. **Accurate retrieval** — does the system find the right snippet.
-2. **Test-time learning** — does it adapt to new domain info appearing mid-session.
-3. **Long-range understanding** — does it answer questions requiring synthesis across the whole history.
-4. **Selective forgetting** (FactConsolidation-SH / FactConsolidation-MH) — does it correctly update memory state when a prior claim is invalidated.
+1. **`Accurate_Retrieval`** — sub-tasks: SH-Doc QA, MH-Doc QA, LongMemEval, EventQA.
+2. **`Test_Time_Learning`** — sub-tasks: BANKING77, CLINC150, TREC-Coarse, TREC-Fine, NLU, Movie Recommendation.
+3. **`Long_Range_Understanding`** — sub-tasks: Novel Summarization (InfBench-Sum), Detective QA.
+4. **`Conflict_Resolution`** — sub-tasks: **FactConsolidation-SH** (single-hop), **FactConsolidation-MH** (multi-hop). The paper's prose name for this competency is "selective forgetting"; the dataset split label is `Conflict_Resolution`.
 
-Feed design is **incremental** — chunks arrive one at a time, mirroring the queue → worker pattern.
+Feed design is **incremental** — chunks arrive one at a time, mirroring Stoa's queue → worker pattern.
+
+## Schema
+
+Each row inside a split has fields: `context` (string), `questions` (list[string]), `answers` (list[string]), `metadata` (dict with `question_types`, `qa_pair_ids`, `source`, ...). The `metadata.question_types` list carries the per-sub-task label (e.g. `FactConsolidation-SH`).
 
 ## Why for Stoa
 
@@ -26,7 +32,17 @@ The FactConsolidation sub-tasks are the most direct test of the [crystallize + i
 - Dataset: HuggingFace, MIT/CC-BY-4.0.
 - 2,071 questions × judge LLM ≈ $30–60 at Haiku/4o-mini rates.
 - No GPU required.
-- Five commercial memory systems (MIRIX, MemGPT/Letta, Mem0, Cognee, Zep) provide direct comparison baselines from the paper.
+
+## Published peer scores (Conflict_Resolution split, Table 3, accuracy %)
+
+| Agent | FC-SH | FC-MH |
+|---|---|---|
+| Cognee | 28 | 3 |
+| Mem0 | 18 | 2 |
+| MIRIX | 14 | 2 |
+| Zep | 7 | 3 |
+
+Multi-hop collapses across the board (max 7% on any agent). Long-context GPT-4o reaches ~60% on SH but also fails on MH. The Conflict_Resolution split is the hardest of the four and the most directly tied to Stoa's crystallize + invalidation pipeline.
 
 ## Gameability notes
 

@@ -13,8 +13,16 @@ name = "stoa-bench"
 path = "src/main.rs"
 
 [dependencies]
+stoa-recall = { path = "../stoa-recall", version = "0.1.0" }
+stoa-recall-local-chroma-sqlite = { path = "../stoa-recall/backends/local-chroma-sqlite", version = "0.1.0" }
+stoa-capture = { path = "../stoa-capture", version = "0.1.0" }
 clap = { workspace = true }
-anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
 
 [dev-dependencies]
 snapbox = { workspace = true }
