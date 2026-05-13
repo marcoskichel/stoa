@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use stoa_recall::RecallBackend;
-use stoa_recall_local_chroma_sqlite::{Bm25Backend, ensure_schema};
+use stoa_recall_local_chroma_sqlite::{IpcBackend, ensure_schema};
 
 use crate::{
     adapter::{BenchmarkAdapter, RunParams},
@@ -44,10 +44,15 @@ fn build_backend(kind: &BackendKind) -> Result<Arc<dyn RecallBackend>, BenchErro
 }
 
 fn build_bm25_backend() -> Result<Arc<dyn RecallBackend>, BenchError> {
-    let tmp = std::env::temp_dir().join("stoa-bench-recall.db");
-    let _result = std::fs::remove_file(&tmp);
-    ensure_schema(&tmp).map_err(|e| BenchError::Backend(e.to_string()))?;
-    let backend = Bm25Backend::open(&tmp).map_err(|e| BenchError::Backend(e.to_string()))?;
+    let dir = std::env::temp_dir().join(format!("stoa-bench-{}", std::process::id()));
+    std::fs::create_dir_all(&dir)?;
+    let recall_db = dir.join("recall.db");
+    let queue_db = dir.join("queue.db");
+    drop(std::fs::remove_file(&recall_db));
+    drop(std::fs::remove_file(&queue_db));
+    ensure_schema(&recall_db).map_err(|e| BenchError::Backend(e.to_string()))?;
+    let backend =
+        IpcBackend::open(&queue_db, &recall_db).map_err(|e| BenchError::Backend(e.to_string()))?;
     Ok(Arc::new(backend))
 }
 
@@ -69,14 +74,9 @@ async fn collect_results(
     cli: &Cli,
     params: &RunParams,
 ) -> Result<Vec<BenchmarkResult>, BenchError> {
-    let single = cli.bench.is_some();
     let mut out = Vec::new();
     for adapter in adapters_for(cli.bench.as_ref()) {
-        match adapter.run(params).await {
-            Ok(result) => out.push(result),
-            Err(BenchError::BackendNotReady) if !single => (),
-            Err(other) => return Err(other),
-        }
+        out.push(adapter.run(params).await?);
     }
     Ok(out)
 }

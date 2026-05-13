@@ -4,10 +4,6 @@
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub(crate) enum BenchError {
-    /// The recall backend is not yet implemented for this surface.
-    #[error("recall backend not ready — wiring lands in a follow-up")]
-    BackendNotReady,
-
     /// Required corpus data was not found at the given path.
     #[error("corpus missing at `{path}` — run `just bench-download-corpus` first")]
     CorpusMissing { path: String },

@@ -1307,6 +1307,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snapbox",
+ "stoa-capture",
  "stoa-recall",
  "stoa-recall-local-chroma-sqlite",
  "thiserror",

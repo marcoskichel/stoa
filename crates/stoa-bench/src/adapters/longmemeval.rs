@@ -171,7 +171,7 @@ async fn index_corpus(questions: &[Question], params: &RunParams) -> Result<(), 
 async fn run_query(q: &Question, params: &RunParams) -> Result<Vec<String>, BenchError> {
     let hits = params
         .backend
-        .search(&q.text, MAX_K, &Filters::default(), StreamSet::bm25_only())
+        .search(&q.text, MAX_K, &Filters::default(), StreamSet::all())
         .await?;
     Ok(hits
         .into_iter()
@@ -218,7 +218,7 @@ fn build_result(
         backbone_model: params.backbone_model.clone(),
         hyperparams: BTreeMap::from([
             ("k".to_owned(), Value::Number(serde_json::Number::from(MAX_K))),
-            ("streams".to_owned(), Value::String("bm25".to_owned())),
+            ("streams".to_owned(), Value::String("all".to_owned())),
         ]),
         metrics,
         cost_usd: 0.0,

@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 stoa-recall = { path = "../stoa-recall", version = "0.1.0" }
 stoa-recall-local-chroma-sqlite = { path = "../stoa-recall/backends/local-chroma-sqlite", version = "0.1.0" }
+stoa-capture = { path = "../stoa-capture", version = "0.1.0" }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
