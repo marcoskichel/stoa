@@ -1059,7 +1059,7 @@ members = ["crates/*", "crates/stoa-recall/backends/*"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/kichelm/stoa"
+repository = "https://github.com/marcoskichel/stoa"
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }

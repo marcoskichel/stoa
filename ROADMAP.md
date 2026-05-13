@@ -188,7 +188,7 @@ The MVP value proposition: **passive capture + auto-injection at session boot ma
 - Release artifacts on GitHub: cross-compiled binaries for all 5 targets
 - `cargo install stoa` works on fresh macOS + Linux machines
 - `README.md` with: install, quickstart (5 commands to value), screenshot of injection in action
-- Docs site (mkdocs at `docs.stoa.dev` or `kichelm.github.io/stoa`) covering: install, schema, capture, recall, injection, troubleshooting
+- Docs site (mkdocs at `docs.stoa.dev` or `marcoskichel.github.io/stoa`) covering: install, schema, capture, recall, injection, troubleshooting
 - Demo video (90s) showing capture → query → injection loop
 - Blog post: "Stoa v0.1: an open-core memory system for AI agents that doesn't trust the agent to remember"
 - HN submission ("Show HN: Stoa")

@@ -150,7 +150,29 @@ just skip `cargo publish` and the per-crate GitHub Release.
 **Required repo secret:** `CARGO_REGISTRY_TOKEN` (a crates.io API
 token with publish rights). `GITHUB_TOKEN` is provided automatically.
 
-**Manual fallback** (release-plz down / first-tag bootstrap): bump
-`workspace.package.version` in `Cargo.toml`, update `CHANGELOG.md`,
-commit, tag `vX.Y.Z`, push. `release.yml` still builds the tarballs;
-`cargo publish` each crate by hand.
+**Manual fallback** (release-plz down / first-tag bootstrap):
+
+1. Bump `workspace.package.version` in `Cargo.toml`. Every crate
+   inherits via `version.workspace = true`.
+2. Bump `version =` in every `python/packages/*/pyproject.toml` — the
+   Python sidecar lives outside the Cargo workspace so release-plz
+   does not touch it. Sidecar versions are pinned manually until the
+   v0.3 rewrite deletes the sidecar entirely.
+3. Update `CHANGELOG.md` per keep-a-changelog 1.1.0: insert a new
+   `## [<version>] - <YYYY-MM-DD>` section *below* `[Unreleased]`,
+   move all `[Unreleased]` entries into it, leave `[Unreleased]`
+   empty. Do **not** rename `[Unreleased]`.
+4. Commit, tag `vX.Y.Z`, push. `release.yml` still builds the
+   cross-platform tarballs. `cargo publish` each `publish = true`
+   crate by hand (`stoa-core`, `stoa-queue`, `stoa-capture`,
+   `stoa-recall`, `stoa-recall-local-chroma-sqlite`, `stoa-cli`,
+   `stoa-hooks`, `stoa-inject-hooks`).
+
+**Partial-state recovery** (release-plz cuts a tag then fails before
+`cargo publish`): delete the new tag locally and on GitHub
+(`git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`), delete
+the GitHub Release at https://github.com/marcoskichel/stoa/releases,
+revert the release PR's merge commit, re-trigger the release flow.
+The `Require CARGO_REGISTRY_TOKEN` pre-flight step in
+`.github/workflows/release-plz.yml` is designed to make this path
+unreachable in normal operation.
