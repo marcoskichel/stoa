@@ -26,19 +26,27 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-${{ matrix.os }}
+          shared-key: rust-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: cargo fmt --check
         run: cargo fmt --all --check
 
+      - name: probe lock drift (debug)
+        run: |
+          cargo update --workspace --dry-run --verbose || true
+          cargo tree -e features --workspace --depth 0 || true
+          cargo --version
+      - name: cargo fetch (validate lockfile)
+        run: cargo fetch --locked
+
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --frozen -- -D warnings
 
       - name: cargo build
-        run: cargo build --workspace --locked
+        run: cargo build --workspace --frozen
 
       - name: cargo test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --frozen
 
       - name: file-length cap (Linux only — bash check)
         if: matrix.os == 'ubuntu-latest'
@@ -52,7 +60,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-supply-chain
+          shared-key: rust-supply-chain-${{ hashFiles('**/Cargo.lock') }}
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny,cargo-machete

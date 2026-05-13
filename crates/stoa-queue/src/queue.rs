@@ -7,7 +7,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde_json::Value;
 
 use crate::claim::{ClaimedRow, claim_in_tx};
@@ -212,6 +212,31 @@ impl Queue {
         })
     }
 
+    /// Atomically consume the response row on `lane` whose `session_id`
+    /// matches `request_id`.
+    ///
+    /// Returns the row payload + id; `Ok(None)` if no matching row exists.
+    /// On a hit the row's `status` is set to `'done'` inside the same
+    /// `BEGIN IMMEDIATE` transaction that selected it, so concurrent
+    /// callers waiting for unrelated `request_id`s never observe nor
+    /// block on the row.
+    ///
+    /// This exists because [`Self::peek_first_pending_on_lane`] only ever
+    /// returns the first row, which would deadlock concurrent IPC callers
+    /// when the head row belongs to a different `request_id`.
+    pub fn take_response_for(&self, lane: &str, request_id: &str) -> Result<Option<(i64, String)>> {
+        with_conn_mut(&self.conn, |c| {
+            let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            let row: Option<(i64, String)> = tx
+                .query_row(TAKE_RESPONSE_SQL, params![lane, request_id], |r| {
+                    Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+                })
+                .optional()?;
+            tx.commit()?;
+            Ok(row)
+        })
+    }
+
     /// Run `PRAGMA wal_checkpoint(TRUNCATE)` to flush + truncate the WAL.
     ///
     /// `SQLite` checkpoints opportunistically but never truncates the WAL
@@ -244,11 +269,33 @@ impl Queue {
 }
 
 fn open_connection(path: &Path) -> Result<Connection> {
+    refuse_symlink(path)?;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
         | OpenFlags::SQLITE_OPEN_CREATE
         | OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let conn = Connection::open_with_flags(path, flags)?;
     Ok(conn)
+}
+
+/// Refuse the open if the DB path itself is a symlink, so a hostile
+/// `.stoa/queue.db -> /tmp/elsewhere` cannot redirect WAL/SHM siblings
+/// into the link target.
+///
+/// We intentionally do NOT walk parent components: macOS roots every
+/// temp dir at `/var/folders -> /private/var/folders`, and rejecting
+/// any symlink anywhere in the path makes every tempdir-based test fail
+/// without adding meaningful defense.
+fn refuse_symlink(path: &Path) -> Result<()> {
+    if let Ok(meta) = std::fs::symlink_metadata(path)
+        && meta.file_type().is_symlink()
+    {
+        return Err(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+            Some(format!("queue.db `{}` is a symlink — refusing to open", path.display())),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 /// Run `f` while holding the connection lock; drop the guard before returning
@@ -320,3 +367,21 @@ SELECT id, session_id, event, payload \
  WHERE status IN ('pending', 'claimed') AND lane = ?1 \
  ORDER BY id ASC \
  LIMIT 1;";
+
+/// Atomic select-and-mark-done for IPC response demux.
+///
+/// Selects the lowest-id live row matching `(lane, session_id)` and flips
+/// its `status` to `'done'` in one statement via `RETURNING`. Concurrent
+/// callers that hold a different `request_id` see `None` (as expected) and
+/// never race a head-of-lane peek out from under each other.
+const TAKE_RESPONSE_SQL: &str = "\
+UPDATE queue_events \
+   SET status = 'done' \
+ WHERE id = ( \
+        SELECT id FROM queue_events \
+         WHERE status IN ('pending', 'claimed') \
+           AND lane = ?1 AND session_id = ?2 \
+         ORDER BY id ASC \
+         LIMIT 1 \
+       ) \
+ RETURNING id, payload;";

@@ -26,7 +26,7 @@ pub(crate) struct Cli {
 pub(crate) const ABOUT: &str = "Open-core knowledge + memory system for AI agents.";
 
 /// Custom help body emitted by `stoa --help`. Pinned by the
-/// `tests/cmd/help.trycmd` golden snapshot — 7 lines + trailing newline.
+/// `tests/cmd/help.trycmd` golden snapshot.
 pub(crate) const HELP_BODY: &str = "\
 Open-core knowledge + memory system for AI agents.
 
@@ -34,6 +34,8 @@ Open-core knowledge + memory system for AI agents.
   read    Print a wiki page
   write   Create or update a wiki page
   schema  Print or validate the workspace schema
+  query   Hybrid recall over the indexed corpus
+  index   Manage the recall index (FTS5 + KG)
 
 ";
 
@@ -41,7 +43,11 @@ Open-core knowledge + memory system for AI agents.
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
     /// Scaffold a fresh Stoa workspace (idempotent).
-    Init,
+    Init {
+        /// Skip Python sidecar bootstrap; BM25-only workspace (<5s cold start).
+        #[arg(long)]
+        no_embeddings: bool,
+    },
 
     /// Print a wiki page (frontmatter + body) to stdout.
     Read {
@@ -80,6 +86,27 @@ pub(crate) enum Command {
         #[command(subcommand)]
         action: HookAction,
     },
+
+    /// Hybrid recall over the indexed corpus.
+    Query {
+        /// Query string.
+        q: String,
+        /// Emit JSON `{hits: [...]}` instead of human-readable lines.
+        #[arg(long)]
+        json: bool,
+        /// Comma-separated streams: `vector`, `bm25`, `graph`. Default: all.
+        #[arg(long, value_delimiter = ',')]
+        streams: Vec<String>,
+        /// Cap on returned hits.
+        #[arg(long, default_value_t = 10)]
+        k: usize,
+    },
+
+    /// Manage the recall index (FTS5 + KG).
+    Index {
+        #[command(subcommand)]
+        action: IndexAction,
+    },
 }
 
 /// `stoa hook ...` sub-subcommands.
@@ -93,11 +120,18 @@ pub(crate) enum HookAction {
     },
 }
 
+/// `stoa index ...` sub-subcommands.
+#[derive(Subcommand, Debug)]
+pub(crate) enum IndexAction {
+    /// Drop and rebuild the FTS5 + vector index from `wiki/` + `sessions/`.
+    Rebuild,
+}
+
 impl Cli {
     /// Dispatch to the relevant subcommand handler.
     pub(crate) fn dispatch(self) -> anyhow::Result<()> {
         match self.command {
-            Command::Init => crate::init::run(),
+            Command::Init { no_embeddings } => crate::init::run(no_embeddings),
             Command::Read { id } => crate::read::run(&id),
             Command::Write { id, frontmatter, body } => {
                 crate::write::run(&id, frontmatter.as_deref(), body.as_deref())
@@ -106,6 +140,10 @@ impl Cli {
             Command::Daemon { once } => crate::daemon::run(once),
             Command::Hook { action } => match action {
                 HookAction::Install { platform } => crate::hook::install(&platform),
+            },
+            Command::Query { q, json, streams, k } => crate::query::run(&q, json, &streams, k),
+            Command::Index { action } => match action {
+                IndexAction::Rebuild => crate::index::rebuild(),
             },
         }
     }
