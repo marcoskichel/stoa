@@ -1,50 +1,71 @@
 {
-  "scenarios": [
+  "instances": [
     {
-      "scenario_id": "smoke-m0",
-      "platform": "slack",
-      "events": [
-        {"ts": "2024-03-01T10:00:00Z", "type": "message", "content": "Deploy to prod scheduled for Friday at 3pm."}
+      "instance_id": "smoke-i0",
+      "timeline": [
+        {
+          "timestamp": "2024-03-01T10:00:00Z",
+          "platform": "slack",
+          "channel": "#ops",
+          "sender": "alice",
+          "message": "Deploy to prod scheduled for Friday at 3pm."
+        },
+        {
+          "timestamp": "2024-03-01T14:00:00Z",
+          "platform": "slack",
+          "channel": "#ops",
+          "sender": "bob",
+          "message": "Pushing the deploy to Monday — staging caught a regression."
+        }
       ],
-      "question": "When is the prod deploy?",
-      "answer": "Friday at 3pm"
+      "qa_pairs": [
+        {"question": "When is the prod deploy?", "answer": "Monday"},
+        {"question": "Who flagged the staging regression?", "answer": "bob"}
+      ]
     },
     {
-      "scenario_id": "smoke-m1",
-      "platform": "linear",
-      "events": [
-        {"ts": "2024-03-01T11:00:00Z", "type": "issue_update", "content": "Issue LIN-42 closed as fixed."}
+      "instance_id": "smoke-i1",
+      "timeline": [
+        {
+          "timestamp": "2024-03-01T11:00:00Z",
+          "platform": "linear",
+          "title": "Login fails on Safari mobile",
+          "description": "Users on iOS Safari can't complete OAuth callback.",
+          "team": "frontend",
+          "priority": "high",
+          "lead": "carol",
+          "attached_resources": ["LIN-42"]
+        },
+        {
+          "timestamp": "2024-03-02T09:00:00Z",
+          "platform": "linear",
+          "title": "LIN-42 status update",
+          "description": "Closed as fixed in commit abc123.",
+          "team": "frontend",
+          "priority": "high",
+          "lead": "carol"
+        }
       ],
-      "question": "What is the status of LIN-42?",
-      "answer": "closed as fixed"
+      "qa_pairs": [
+        {"question": "What is the status of LIN-42?", "answer": "closed as fixed"},
+        {"question": "Which team owns LIN-42?", "answer": "frontend"}
+      ]
     },
     {
-      "scenario_id": "smoke-m2",
-      "platform": "git",
-      "events": [
-        {"ts": "2024-03-01T12:00:00Z", "type": "commit", "content": "feat(auth): add OAuth2 login flow"}
+      "instance_id": "smoke-i2",
+      "timeline": [
+        {
+          "timestamp": "2024-03-01T12:00:00Z",
+          "platform": "gitea",
+          "repo": "acme/api",
+          "event_type": "commit",
+          "author": "dave",
+          "message": "feat(auth): add OAuth2 login flow"
+        }
       ],
-      "question": "What did the last commit do?",
-      "answer": "added OAuth2 login flow"
-    },
-    {
-      "scenario_id": "smoke-m3",
-      "platform": "slack",
-      "events": [
-        {"ts": "2024-03-01T09:00:00Z", "type": "message", "content": "Team standup at 9am tomorrow."},
-        {"ts": "2024-03-01T14:00:00Z", "type": "message", "content": "Standup moved to 10am tomorrow."}
-      ],
-      "question": "What time is tomorrow's standup?",
-      "answer": "10am"
-    },
-    {
-      "scenario_id": "smoke-m4",
-      "platform": "linear",
-      "events": [
-        {"ts": "2024-03-01T08:00:00Z", "type": "issue_created", "content": "Bug: login fails on Safari mobile browsers."}
-      ],
-      "question": "What bug was reported?",
-      "answer": "login fails on Safari mobile browsers"
+      "qa_pairs": [
+        {"question": "What did the last commit add?", "answer": "OAuth2 login flow"}
+      ]
     }
   ]
 }

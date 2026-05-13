@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# Dataset: MemoryAgentBench
-# Source:  https://huggingface.co/datasets/emrecanacikgoz/MemoryAgentBench
-# License: Apache-2.0 (verify before use)
-# Size:    ~10 MB
+# Dataset: MemoryAgentBench (HUST AI lab — ICLR 2026)
+# Source:  https://huggingface.co/datasets/ai-hyz/MemoryAgentBench
+# Paper:   https://arxiv.org/abs/2507.05257
+# Scorer:  https://github.com/HUST-AI-HYZ/MemoryAgentBench
+# License: Verify per upstream
+# Size:    ~50 MB
 # Usage:   bash benchmarks/corpus/memory-agent-bench.sh
+#
+# The dataset uses top-level HuggingFace splits, not a flat type field:
+#   Accurate_Retrieval / Test_Time_Learning / Long_Range_Understanding /
+#   Conflict_Resolution (which holds FactConsolidation-SH and -MH).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${SCRIPT_DIR}/memory-agent-bench"
 VERSION_FILE="${CACHE_DIR}/.version"
 EXPECTED_VERSION="1.0.0"
-HF_HANDLE="emrecanacikgoz/MemoryAgentBench"
+HF_HANDLE="ai-hyz/MemoryAgentBench"
 
 if [[ -f "${VERSION_FILE}" ]] && [[ "$(cat "${VERSION_FILE}")" == "${EXPECTED_VERSION}" ]]; then
     echo "memory-agent-bench: cache valid (${EXPECTED_VERSION})" >&2

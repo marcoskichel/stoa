@@ -1,41 +1,60 @@
 {
-  "tasks": [
+  "Accurate_Retrieval": [
     {
-      "task_id": "smoke-t0",
-      "type": "retrieval",
-      "query": "What is the user's preferred programming language?",
-      "context": "The user mentioned they primarily code in Rust.",
-      "answer": "Rust"
+      "context": "The user mentioned they primarily code in Rust and prefer functional patterns.",
+      "questions": ["What is the user's preferred programming language?"],
+      "answers": ["Rust"],
+      "metadata": {
+        "question_types": ["SH-Doc QA"],
+        "qa_pair_ids": ["smoke-ar-0"],
+        "source": "stoa-smoke-fixture"
+      }
+    }
+  ],
+  "Test_Time_Learning": [
+    {
+      "context": "Definitions: a 'flux capacitor' is a fictional time-travel component from Back to the Future.",
+      "questions": ["What movie does the term 'flux capacitor' come from?"],
+      "answers": ["Back to the Future"],
+      "metadata": {
+        "question_types": ["NLU"],
+        "qa_pair_ids": ["smoke-ttl-0"],
+        "source": "stoa-smoke-fixture"
+      }
+    }
+  ],
+  "Long_Range_Understanding": [
+    {
+      "context": "Chapter 1: Alice meets Bob. Chapter 2: They form a startup. Chapter 3: The startup fails. Chapter 4: They start a new venture together.",
+      "questions": ["Summarise the overall arc of Alice and Bob's relationship."],
+      "answers": ["They meet, start and fail one venture, then start another together."],
+      "metadata": {
+        "question_types": ["Novel Summarization"],
+        "qa_pair_ids": ["smoke-lru-0"],
+        "source": "stoa-smoke-fixture"
+      }
+    }
+  ],
+  "Conflict_Resolution": [
+    {
+      "context": "Earlier: 'My name is Bob.' Later: 'Actually, my name is Robert — Bob is just a nickname.'",
+      "questions": ["What is the user's real first name?"],
+      "answers": ["Robert"],
+      "metadata": {
+        "question_types": ["FactConsolidation-SH"],
+        "qa_pair_ids": ["smoke-cr-0"],
+        "source": "stoa-smoke-fixture"
+      }
     },
     {
-      "task_id": "smoke-t1",
-      "type": "fact_consolidation_sh",
-      "query": "What is the user's name?",
-      "history": [
-        {"content": "Hi, I am Bob."},
-        {"content": "Actually, my name is Robert — Bob is just a nickname."}
-      ],
-      "answer": "Robert (nickname: Bob)"
-    },
-    {
-      "task_id": "smoke-t2",
-      "type": "selective_forgetting",
-      "query": "What was the user's old GitHub handle?",
-      "history": [{"content": "My GitHub handle used to be @old-handle before I changed it."}],
-      "deleted": true,
-      "answer": null
-    },
-    {
-      "task_id": "smoke-t3",
-      "type": "test_time_learning",
-      "query": "New fact: the user now uses Neovim instead of Emacs.",
-      "answer": "acknowledged"
-    },
-    {
-      "task_id": "smoke-t4",
-      "type": "retrieval",
-      "query": "Which editor does the user use?",
-      "answer": "Neovim"
+      "context": "User stated: 'I live in Seattle.' Later: 'I moved to Portland last year.' Later still: 'Actually I moved back to Seattle two months ago.'",
+      "questions": ["Where does the user currently live?"],
+      "answers": ["Seattle"],
+      "metadata": {
+        "question_types": ["FactConsolidation-MH"],
+        "qa_pair_ids": ["smoke-cr-1"],
+        "source": "stoa-smoke-fixture"
+      }
     }
   ]
 }

@@ -1,50 +1,86 @@
-{
-  "sessions": [
-    {
-      "session_id": "smoke-s0",
-      "turns": [
-        {"role": "user", "content": "My name is Alice and I work at Acme Corp in the infrastructure team."},
-        {"role": "assistant", "content": "Nice to meet you, Alice! Happy to help with anything infrastructure-related."}
+[
+  {
+    "question_id": "smoke-q0",
+    "question_type": "single-session-user",
+    "question": "What is the user's name?",
+    "answer": "Alice",
+    "question_date": "2024-03-01",
+    "haystack_session_ids": ["smoke-s0"],
+    "haystack_dates": ["2024-02-15"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "My name is Alice and I work at Acme Corp in the infrastructure team.", "has_answer": true},
+        {"role": "assistant", "content": "Nice to meet you, Alice. Happy to help with anything infrastructure-related."}
       ]
-    },
-    {
-      "session_id": "smoke-s1",
-      "turns": [
-        {"role": "user", "content": "We switched our CI from Jenkins to GitHub Actions last month."},
-        {"role": "assistant", "content": "Good choice — GitHub Actions integrates well with your existing repos."}
+    ],
+    "answer_session_ids": ["smoke-s0"]
+  },
+  {
+    "question_id": "smoke-q1",
+    "question_type": "single-session-user",
+    "question": "Where does the user work?",
+    "answer": "Acme Corp",
+    "question_date": "2024-03-01",
+    "haystack_session_ids": ["smoke-s0"],
+    "haystack_dates": ["2024-02-15"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "My name is Alice and I work at Acme Corp in the infrastructure team.", "has_answer": true},
+        {"role": "assistant", "content": "Nice to meet you, Alice."}
       ]
-    }
-  ],
-  "questions": [
-    {
-      "question_id": "smoke-q0",
-      "question": "What is the user's name?",
-      "answer": "Alice",
-      "category": "information_extraction"
-    },
-    {
-      "question_id": "smoke-q1",
-      "question": "Where does the user work?",
-      "answer": "Acme Corp",
-      "category": "information_extraction"
-    },
-    {
-      "question_id": "smoke-q2",
-      "question": "Which team is the user on?",
-      "answer": "infrastructure",
-      "category": "multi_session_reasoning"
-    },
-    {
-      "question_id": "smoke-q3",
-      "question": "What CI system does the user use now?",
-      "answer": "GitHub Actions",
-      "category": "knowledge_update"
-    },
-    {
-      "question_id": "smoke-q4",
-      "question": "Has the user mentioned their location?",
-      "answer": "No",
-      "category": "abstention"
-    }
-  ]
-}
+    ],
+    "answer_session_ids": ["smoke-s0"]
+  },
+  {
+    "question_id": "smoke-q2",
+    "question_type": "multi-session",
+    "question": "Which team does the user work on, and what CI system do they use?",
+    "answer": "infrastructure team; GitHub Actions",
+    "question_date": "2024-03-01",
+    "haystack_session_ids": ["smoke-s0", "smoke-s1"],
+    "haystack_dates": ["2024-02-15", "2024-02-22"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I work at Acme Corp in the infrastructure team.", "has_answer": true},
+        {"role": "assistant", "content": "Got it."}
+      ],
+      [
+        {"role": "user", "content": "We switched our CI from Jenkins to GitHub Actions last month.", "has_answer": true},
+        {"role": "assistant", "content": "Good choice."}
+      ]
+    ],
+    "answer_session_ids": ["smoke-s0", "smoke-s1"]
+  },
+  {
+    "question_id": "smoke-q3",
+    "question_type": "knowledge-update",
+    "question": "What CI system does the user use now?",
+    "answer": "GitHub Actions",
+    "question_date": "2024-03-01",
+    "haystack_session_ids": ["smoke-s1"],
+    "haystack_dates": ["2024-02-22"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "We switched our CI from Jenkins to GitHub Actions last month.", "has_answer": true},
+        {"role": "assistant", "content": "Noted."}
+      ]
+    ],
+    "answer_session_ids": ["smoke-s1"]
+  },
+  {
+    "question_id": "smoke-q4_abs",
+    "question_type": "single-session-user_abs",
+    "question": "What city does the user live in?",
+    "answer": "no information is available",
+    "question_date": "2024-03-01",
+    "haystack_session_ids": ["smoke-s0"],
+    "haystack_dates": ["2024-02-15"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "My name is Alice and I work at Acme Corp.", "has_answer": false},
+        {"role": "assistant", "content": "Nice to meet you, Alice."}
+      ]
+    ],
+    "answer_session_ids": []
+  }
+]

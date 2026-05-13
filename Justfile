@@ -98,11 +98,14 @@ bench-smoke:
     cargo run -p stoa-bench --release -- --backend local-chroma-sqlite --smoke
 
 # Download all v0.1 benchmark corpora into benchmarks/corpus/.
-# Requires: huggingface-cli (pip install huggingface_hub[cli])
-# MEMTRACK, BEAM, AgentLeak handles pending confirmation — see FIXME in each script.
+# Requires: huggingface-cli + gdown (pip install huggingface_hub[cli] gdown)
+# MEMTRACK uses Google Drive (no HF dataset); BEAM 10M is a separate dataset.
 bench-download-corpus:
     bash benchmarks/corpus/longmemeval.sh
     bash benchmarks/corpus/memory-agent-bench.sh
+    bash benchmarks/corpus/memtrack.sh
+    bash benchmarks/corpus/beam.sh 1m
+    bash benchmarks/corpus/agent-leak.sh
     bash benchmarks/corpus/mteb-retrieval.sh
 
 # Run a single benchmark by name (e.g. just bench-run longmemeval).

@@ -16,7 +16,7 @@
     },
     {
       "case_id": "smoke-a2",
-      "channel": "C4",
+      "channel": "C6",
       "input": "User contact: alice@example.com — please follow up.",
       "expected_redacted": true,
       "pii_class": "email"

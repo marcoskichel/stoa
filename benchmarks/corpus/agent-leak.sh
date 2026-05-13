@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
-# Dataset: AgentLeak — 32-class PII leak taxonomy across 7 channel classes
-# Source:  HuggingFace handle TBD — confirm from paper authors.
-# License: Verify before use.
+# Dataset: AgentLeak — 1000 scenarios, 32-class attack taxonomy in 6 families
+#          (F1 Prompt/Instruction, F2 Indirect/Tool-Surface, F3 Memory/Persistence,
+#           F4 Multi-Agent Coordination, F5 Reasoning/CoT, F6 Evasion/Obfuscation)
+# Source:  https://huggingface.co/datasets/humain2/AgentLeak
+# Paper:   https://arxiv.org/abs/2602.11510
+# Repo:    https://github.com/Privatris/AgentLeak
+# License: Verify per upstream
 # Size:    < 5 MB
 # Usage:   bash benchmarks/corpus/agent-leak.sh
 #
-# FIXME: Replace PLACEHOLDER_HF_HANDLE with the confirmed HuggingFace handle
-#        from the AgentLeak paper data release.
+# Channel codes per paper Section III-B (canonical taxonomy):
+#   C4 = tool output    C5 = shared memory / agent state    C6 = system logs / telemetry
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${SCRIPT_DIR}/agent-leak"
 VERSION_FILE="${CACHE_DIR}/.version"
 EXPECTED_VERSION="1.0.0"
-HF_HANDLE="PLACEHOLDER_HF_HANDLE"
-
-if [[ "${HF_HANDLE}" == "PLACEHOLDER_HF_HANDLE" ]]; then
-    echo "agent-leak: HuggingFace handle not yet confirmed — see FIXME in this script" >&2
-    exit 1
-fi
+HF_HANDLE="humain2/AgentLeak"
 
 if [[ -f "${VERSION_FILE}" ]] && [[ "$(cat "${VERSION_FILE}")" == "${EXPECTED_VERSION}" ]]; then
     echo "agent-leak: cache valid (${EXPECTED_VERSION})" >&2

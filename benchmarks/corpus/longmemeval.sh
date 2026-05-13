@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Dataset: LongMemEval (Wu et al., 2024)
-# Source:  https://huggingface.co/datasets/xiaowu0162/longmemeval
-# License: CC-BY-4.0
-# Size:    ~50 MB compressed
+# Dataset: LongMemEval (Wu et al., 2024 — ICLR 2025)
+# Source:  https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned
+#          (cleaned split — fixes oracle JSON load + removes noisy sessions;
+#           the original handle `xiaowu0162/longmemeval` has a broken viewer.)
+# Paper:   https://arxiv.org/abs/2410.10813
+# Scorer:  https://github.com/xiaowu0162/LongMemEval — src/evaluation/evaluate_qa.py
+#          No release tags; pin to a main HEAD commit SHA.
+# License: MIT
+# Size:    ~3 GB
 # Usage:   bash benchmarks/corpus/longmemeval.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${SCRIPT_DIR}/longmemeval"
 VERSION_FILE="${CACHE_DIR}/.version"
-EXPECTED_VERSION="1.0.0"
-HF_HANDLE="xiaowu0162/longmemeval"
+EXPECTED_VERSION="cleaned-2026-01"
+HF_HANDLE="xiaowu0162/longmemeval-cleaned"
 
 if [[ -f "${VERSION_FILE}" ]] && [[ "$(cat "${VERSION_FILE}")" == "${EXPECTED_VERSION}" ]]; then
     echo "longmemeval: cache valid (${EXPECTED_VERSION})" >&2

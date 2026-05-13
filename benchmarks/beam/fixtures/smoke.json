@@ -12,7 +12,7 @@
       "questions": [
         {
           "q_id": "smoke-q0",
-          "type": "event_recall",
+          "type": "information_extraction",
           "question": "What is the API migration deadline?",
           "answer": "March 15"
         },

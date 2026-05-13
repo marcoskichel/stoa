@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
 # Dataset: BEAM (Beyond a Million Tokens) — ICLR 2026
-# Source:  https://arxiv.org/abs/2510.27246
-#          HuggingFace handle TBD — confirm from the paper's dataset card.
-# License: Verify before use.
-# Size:    Variable by tier (128K / 500K / 1M / 10M). Download 128K+1M for v0.1.
-# Usage:   bash benchmarks/corpus/beam.sh [--tier 128k|1m|10m]
-#
-# FIXME: Replace PLACEHOLDER_HF_HANDLE with the confirmed HuggingFace handle
-#        from the BEAM paper's data release page.
+# Source:  https://huggingface.co/datasets/Mohammadta/BEAM (128K / 500K / 1M)
+#          https://huggingface.co/datasets/Mohammadta/BEAM-10M (10M tier — separate)
+# Paper:   https://arxiv.org/abs/2510.27246
+# Repo:    https://github.com/mohammadtavakoli78/BEAM
+# License: Verify per upstream
+# Size:    Variable by tier. Distribution: 20×128K, 35×500K, 35×1M, 10×10M
+#          (100 conversations, 2,000 questions total — 20 per conversation).
+# Usage:   bash benchmarks/corpus/beam.sh [--tier 128k|500k|1m|10m]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${SCRIPT_DIR}/beam"
-VERSION_FILE="${CACHE_DIR}/.version"
 EXPECTED_VERSION="1.0.0"
-HF_HANDLE="PLACEHOLDER_HF_HANDLE"
 TIER="${1:-1m}"
 
-if [[ "${HF_HANDLE}" == "PLACEHOLDER_HF_HANDLE" ]]; then
-    echo "beam: HuggingFace handle not yet confirmed — see FIXME in this script" >&2
-    exit 1
-fi
+case "${TIER}" in
+    10m) HF_HANDLE="Mohammadta/BEAM-10M" ;;
+    128k|500k|1m) HF_HANDLE="Mohammadta/BEAM" ;;
+    *) echo "beam: unknown tier '${TIER}' (expected 128k|500k|1m|10m)" >&2; exit 1 ;;
+esac
 
 TIER_CACHE_DIR="${CACHE_DIR}/${TIER}"
 if [[ -f "${TIER_CACHE_DIR}/.version" ]] && \
