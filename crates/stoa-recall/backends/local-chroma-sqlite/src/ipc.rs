@@ -230,7 +230,7 @@ impl RecallBackend for IpcBackend {
             "query": query,
             "k": k,
             "filters": filters,
-            "streams": streams.iter().map(Stream::as_str).collect::<Vec<_>>(),
+            "streams": streams,
         });
         match self
             .round_trip(SEARCH_EVENT, "search", args, DEFAULT_SEARCH_TIMEOUT)

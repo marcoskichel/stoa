@@ -44,12 +44,28 @@ impl Stream {
 /// Set of streams the caller wants the backend to consult.
 ///
 /// Iteration is deterministic in `[Vector, Bm25, Graph]` order so RRF
-/// fusion + JSON serialization are stable across calls.
+/// fusion + JSON serialization are stable across calls. Serializes as
+/// a JSON array of stream names (`["vector","bm25"]`) so the wire
+/// shape matches what the Python sidecar expects on `recall.search`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamSet {
     vector: bool,
     bm25: bool,
     graph: bool,
+}
+
+impl Serialize for StreamSet {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let streams: Vec<Stream> = self.iter().collect();
+        streams.serialize(ser)
+    }
+}
+
+impl<'de> Deserialize<'de> for StreamSet {
+    fn deserialize<D: serde::Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let streams: Vec<Stream> = Vec::deserialize(de)?;
+        Ok(Self::from_slice(&streams))
+    }
 }
 
 impl StreamSet {
