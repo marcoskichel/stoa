@@ -114,11 +114,43 @@ by `.gitignore`).
 
 ## Release flow
 
-1. Update `CHANGELOG.md`: insert a new `## [<version>] - <YYYY-MM-DD>`
-   section *below* `[Unreleased]`, move all `[Unreleased]` entries into
-   it, leave `[Unreleased]` empty.
-2. Bump versions across the `Cargo.toml` workspace and every
-   `pyproject.toml`.
-3. Run `just ci` to confirm the changelog gate, lints, and tests stay
-   green.
-4. Tag `v0.X.Y` and push. `release.yml` builds and attaches the tarballs.
+Releases are automated by [release-plz](https://release-plz.dev/) and
+driven entirely by the Conventional Commits on `main`.
+
+**Every PR merge:**
+
+The `release-plz` workflow opens (or updates) a single
+`chore(release): vX.Y.Z` PR with:
+
+- `workspace.package.version` bumped in `Cargo.toml` (every crate
+  inherits via `version.workspace = true`).
+- New entries under `## [Unreleased]` in `CHANGELOG.md` grouped per
+  keep-a-changelog 1.1.0 (Added / Changed / Fixed / Removed /
+  Security). The grouping is derived from each commit's Conventional
+  Commits type.
+
+Edit the PR in-place to reword changelog prose if needed — release-plz
+only rewrites the entries it generated.
+
+**Cutting a release:**
+
+1. Merge the release PR.
+2. The `release-plz-release` job runs on the post-merge push, tags
+   `vX.Y.Z`, publishes each `publish = true` crate to crates.io, and
+   opens a GitHub Release for the tag.
+3. The existing `release.yml` workflow fires on the new tag and
+   builds the cross-platform tarballs.
+
+**Internal crates that do not publish** (`stoa-bench`, `stoa-doclint`,
+`stoa-render-mermaid`, `stoa-render-svg`, `stoa-render-tui`,
+`stoa-viz`) are opted out in `release-plz.toml`. They still bump
+version + changelog in lockstep with the rest of the workspace; they
+just skip `cargo publish` and the per-crate GitHub Release.
+
+**Required repo secret:** `CARGO_REGISTRY_TOKEN` (a crates.io API
+token with publish rights). `GITHUB_TOKEN` is provided automatically.
+
+**Manual fallback** (release-plz down / first-tag bootstrap): bump
+`workspace.package.version` in `Cargo.toml`, update `CHANGELOG.md`,
+commit, tag `vX.Y.Z`, push. `release.yml` still builds the tarballs;
+`cargo publish` each crate by hand.

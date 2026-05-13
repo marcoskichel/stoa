@@ -25,9 +25,9 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
-repository = "https://github.com/kichelm/stoa"
+repository = "https://github.com/marcoskichel/stoa"
 authors = ["Stoa Contributors"]
-homepage = "https://github.com/kichelm/stoa"
+homepage = "https://github.com/marcoskichel/stoa"
 
 [workspace.dependencies]
 # CLI / runtime
