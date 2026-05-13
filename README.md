@@ -4,9 +4,9 @@
 
 Andrej Karpathy's [LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
 sketched the right shape for an agent's long-term memory: markdown pages, curated by the model itself,
-that compound across sessions. Stoa builds on that pattern — capture every session, distill what matters
-into the wiki, feed the relevant pages back into the next session — all through the agent's existing
-hook surface.
+that compound across sessions. Stoa builds on that pattern with proper recall: every session gets
+captured, distilled into the wiki, and surfaced back into the next session by meaning, not keyword —
+all through the agent's existing hook surface.
 
 [![CI](https://github.com/marcoskichel/stoa/actions/workflows/rust.yml/badge.svg)](https://github.com/marcoskichel/stoa/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
