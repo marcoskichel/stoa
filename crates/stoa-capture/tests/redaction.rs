@@ -234,3 +234,123 @@ fn jsonl_with_ssh_path_remains_parseable() {
     let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(&out);
     assert!(parsed.is_ok(), "ssh path redaction must not eat trailing JSON: {out:?}");
 }
+
+#[test]
+fn redacts_ssn_us() {
+    let r = default_redactor();
+    let out = r.redact_line("SSN: 123-45-6789 on file");
+    assert!(has_redaction_kind(&out, "ssn-us"), "SSN not redacted: {out:?}");
+    assert!(!out.contains("123-45-6789"));
+}
+
+#[test]
+fn ssn_us_preserves_zip_plus_four() {
+    let r = default_redactor();
+    let line = "Ship to ZIP 90210-1234";
+    let out = r.redact_line(line);
+    assert_eq!(out, line, "ZIP+4 must not match SSN pattern: {out:?}");
+}
+
+#[test]
+fn redacts_phone_us_10d_dashed() {
+    let r = default_redactor();
+    let out = r.redact_line("Call (415) 555-0143 for service");
+    assert!(has_redaction_kind(&out, "phone-us-10d"), "phone not redacted: {out:?}");
+    assert!(!out.contains("555-0143"));
+}
+
+#[test]
+fn redacts_phone_us_7d_short_form() {
+    let r = default_redactor();
+    let out = r.redact_line("phone=555-0174");
+    assert!(has_redaction_marker(&out), "7-digit phone not redacted: {out:?}");
+    assert!(!out.contains("555-0174"));
+}
+
+#[test]
+fn phone_us_7d_preserves_short_alpha_strings() {
+    let r = default_redactor();
+    let line = "version=v1.2-rc3 commit=abc-defg";
+    let out = r.redact_line(line);
+    assert_eq!(out, line, "alpha-suffix tokens must not match phone pattern: {out:?}");
+}
+
+#[test]
+fn redacts_credit_card_dashed() {
+    let r = default_redactor();
+    let out = r.redact_line("CC: 4111-1111-1111-1111 (test)");
+    assert!(has_redaction_kind(&out, "credit-card"), "CC not redacted: {out:?}");
+    assert!(!out.contains("4111-1111-1111-1111"));
+}
+
+#[test]
+fn credit_card_preserves_non_card_runs() {
+    let r = default_redactor();
+    let line = "build 1234-abcd-5678 not a card";
+    let out = r.redact_line(line);
+    assert!(
+        !has_redaction_kind(&out, "credit-card"),
+        "alphanum run must not look like a card: {out:?}",
+    );
+}
+
+#[test]
+fn redacts_iban_gb_form() {
+    let r = default_redactor();
+    let out = r.redact_line("IBAN GB29 NWBK 6016 1331 9268 19 noted");
+    assert!(has_redaction_kind(&out, "iban"), "IBAN not redacted: {out:?}");
+}
+
+#[test]
+fn iban_preserves_uppercase_words() {
+    let r = default_redactor();
+    let line = "USA UK CA DE FR IT NL";
+    let out = r.redact_line(line);
+    assert_eq!(out, line, "country code abbreviations must not match IBAN: {out:?}");
+}
+
+#[test]
+fn redacts_ipv4_in_log_line() {
+    let r = default_redactor();
+    let out = r.redact_line("client 203.0.113.42 connected");
+    assert!(has_redaction_kind(&out, "ipv4"), "IPv4 not redacted: {out:?}");
+    assert!(!out.contains("203.0.113.42"));
+}
+
+#[test]
+fn ipv4_preserves_three_part_versions() {
+    let r = default_redactor();
+    let line = "stoa-cli v0.1.2 (build 9)";
+    let out = r.redact_line(line);
+    assert_eq!(out, line, "three-part version must not match IPv4: {out:?}");
+}
+
+#[test]
+fn redacts_mac_address_colon_form() {
+    let r = default_redactor();
+    let out = r.redact_line("iface eth0 mac 00:1B:44:11:3A:B7");
+    assert!(has_redaction_kind(&out, "mac-address"), "MAC not redacted: {out:?}");
+}
+
+#[test]
+fn redacts_mac_address_dash_form_lowercase() {
+    let r = default_redactor();
+    let out = r.redact_line("hw addr: 00-1b-44-11-3a-b7");
+    assert!(has_redaction_kind(&out, "mac-address"), "lowercase MAC not redacted: {out:?}");
+}
+
+#[test]
+fn redacts_canary_token() {
+    let r = default_redactor();
+    let out = r.redact_line("ssn: CANARY_SSN_ZVR5XO4K (do not forward)");
+    assert!(has_redaction_kind(&out, "canary-token"), "canary not redacted: {out:?}");
+    assert!(!out.contains("CANARY_SSN_ZVR5XO4K"));
+}
+
+#[test]
+fn canary_token_preserves_unrelated_uppercase() {
+    let r = default_redactor();
+    let line = "ALLCAPS_NORMAL_WORD";
+    let out = r.redact_line(line);
+    assert_eq!(out, line, "non-CANARY uppercase must not match: {out:?}");
+}
