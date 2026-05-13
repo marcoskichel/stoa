@@ -73,6 +73,11 @@ impl Bm25Backend {
     }
 
     /// Replace the FTS5 row for `doc_id`. Idempotent on `doc_id`.
+    ///
+    /// Runs DELETE + INSERT in one transaction so a panic between the
+    /// two `execute` calls cannot leave the row deleted-but-not-reinserted.
+    /// Eliminates the mutex-poisoning risk at this callsite — the
+    /// connection is never observed in a torn state.
     pub fn upsert(
         &self,
         doc_id: &str,
@@ -80,9 +85,11 @@ impl Bm25Backend {
         source_path: &str,
         content: &str,
     ) -> Result<(), Bm25Error> {
-        run_with_conn(&self.conn, |c| {
-            c.execute(DELETE_BY_DOC_ID, params![doc_id])?;
-            c.execute(INSERT_DOC, params![doc_id, kind, source_path, content])?;
+        run_with_conn_mut(&self.conn, |c| {
+            let tx = c.transaction()?;
+            tx.execute(DELETE_BY_DOC_ID, params![doc_id])?;
+            tx.execute(INSERT_DOC, params![doc_id, kind, source_path, content])?;
+            tx.commit()?;
             Ok(())
         })
     }
@@ -146,6 +153,19 @@ fn run_with_conn<R>(
     result
 }
 
+fn run_with_conn_mut<R>(
+    mu: &Arc<Mutex<Connection>>,
+    f: impl FnOnce(&mut Connection) -> Result<R, Bm25Error>,
+) -> Result<R, Bm25Error> {
+    let mut guard = match mu.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let result = f(&mut guard);
+    drop(guard);
+    result
+}
+
 fn row_to_hit(row: &rusqlite::Row<'_>) -> Result<Hit, rusqlite::Error> {
     let doc_id: String = row.get(0)?;
     let kind: String = row.get(1)?;
@@ -199,9 +219,11 @@ impl RecallBackend for Bm25Backend {
         let body = content.to_owned();
         let conn = Arc::clone(&self.conn);
         tokio::task::spawn_blocking(move || {
-            run_with_conn(&conn, |c| {
-                c.execute(DELETE_BY_DOC_ID, params![id])?;
-                c.execute(INSERT_DOC, params![id, kind, path, body])?;
+            run_with_conn_mut(&conn, |c| {
+                let tx = c.transaction()?;
+                tx.execute(DELETE_BY_DOC_ID, params![id])?;
+                tx.execute(INSERT_DOC, params![id, kind, path, body])?;
+                tx.commit()?;
                 Ok(())
             })
         })
