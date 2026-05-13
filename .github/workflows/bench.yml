@@ -1,6 +1,8 @@
 name: benchmarks
 
 on:
+  schedule:
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       backend:
@@ -25,10 +27,12 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  NIGHTLY_BACKEND: local-chroma-sqlite
+  NIGHTLY_SMOKE: "true"
 
 jobs:
   bench:
-    name: ${{ inputs.bench || 'full-suite' }} (${{ inputs.backend }})
+    name: ${{ inputs.bench || 'full-suite' }} (${{ inputs.backend || 'local-chroma-sqlite' }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -48,7 +52,7 @@ jobs:
         run: cd python && uv sync --all-groups
 
       - name: Download corpus
-        if: ${{ !inputs.smoke }}
+        if: ${{ inputs.smoke != true && github.event_name != 'schedule' }}
         run: |
           pip install huggingface_hub[cli]
           bash benchmarks/corpus/longmemeval.sh
@@ -60,9 +64,9 @@ jobs:
 
       - name: Run benchmark
         env:
-          BENCH_BACKEND: ${{ inputs.backend }}
+          BENCH_BACKEND: ${{ inputs.backend || env.NIGHTLY_BACKEND }}
           BENCH_NAME: ${{ inputs.bench }}
-          BENCH_SMOKE: ${{ inputs.smoke }}
+          BENCH_SMOKE: ${{ inputs.smoke || env.NIGHTLY_SMOKE }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           mkdir -p benchmarks/results

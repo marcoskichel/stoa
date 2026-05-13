@@ -15,6 +15,7 @@ use crate::{
     backends::NoopBackend,
     cli::{BackendKind, BenchmarkKind, Cli},
     error::BenchError,
+    report,
     result::BenchmarkResult,
 };
 
@@ -130,6 +131,7 @@ fn write_results(results: Vec<BenchmarkResult>, output: Option<&Path>) -> Result
 
 fn write_to_file(result: &BenchmarkResult, json: &str, dir: &Path) -> Result<(), BenchError> {
     let filename = format!("{}-{}-{}.json", result.version, result.backend, result.benchmark);
-    std::fs::write(dir.join(filename), json)?;
+    std::fs::write(dir.join(&filename), json)?;
+    report::write_markdown(result, dir)?;
     Ok(())
 }
