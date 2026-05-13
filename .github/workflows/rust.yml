@@ -32,7 +32,7 @@ jobs:
         run: cargo fmt --all --check
 
       - name: cargo fetch (validate lockfile)
-        run: cargo fetch --locked
+        run: cargo fetch --locked -vv
 
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --frozen -- -D warnings
