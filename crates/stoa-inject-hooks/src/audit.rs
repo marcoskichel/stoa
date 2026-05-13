@@ -50,9 +50,28 @@ fn write_line(log_path: &Path, line: &str) -> std::io::Result<()> {
     if let Some(parent) = log_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    refuse_symlink(log_path)?;
     let mut f = OpenOptions::new()
         .create(true)
         .append(true)
         .open(log_path)?;
     f.write_all(line.as_bytes())
+}
+
+/// Refuse the open if the audit log path is itself a symlink — a
+/// hostile `.stoa/audit.log -> /etc/passwd` (or a TOCTOU swap mid-
+/// session) would otherwise let the hook append JSONL to an arbitrary
+/// file. We only inspect the file itself; parent-dir symlinks stay
+/// allowed because macOS roots every tmpdir at `/var/folders ->
+/// /private/var/folders` and tests would otherwise fail.
+fn refuse_symlink(path: &Path) -> std::io::Result<()> {
+    if let Ok(meta) = std::fs::symlink_metadata(path)
+        && meta.file_type().is_symlink()
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("audit log `{}` is a symlink — refusing to open", path.display()),
+        ));
+    }
+    Ok(())
 }

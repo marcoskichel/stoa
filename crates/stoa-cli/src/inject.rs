@@ -31,7 +31,6 @@ struct InjectEvent {
     hits: u64,
     chars_injected: u64,
     additional_context: String,
-    raw: String,
 }
 
 fn collect_events(
@@ -70,7 +69,6 @@ fn parse_inject_line(line: &str) -> Option<InjectEvent> {
         hits: take_u64(&value, "hits"),
         chars_injected: take_u64(&value, "chars_injected"),
         additional_context: take_str(&value, "additional_context"),
-        raw: line.to_owned(),
     })
 }
 
@@ -111,6 +109,5 @@ fn emit_event(ev: &InjectEvent) {
     if !ev.additional_context.is_empty() {
         println!("{}", ev.additional_context);
     }
-    println!("{}", ev.raw);
     println!();
 }

@@ -38,7 +38,7 @@ fn make_event(session_id: &str, ctx: &str) -> String {
         "session_id": session_id,
         "query": "redis cache",
         "hits": 3,
-        "chars_injected": ctx.len(),
+        "chars_injected": ctx.chars().count(),
         "additional_context": ctx,
     })
     .to_string()
@@ -131,9 +131,9 @@ fn inject_log_limit_caps_output() {
     let out = stoa(&ws, &["inject", "log", "--limit", "2"]);
     assert!(out.status.success(), "{}", stderr(&out));
     let body = stdout(&out);
-    let occurrences = body.matches("stoa.inject").count();
-    assert!(
-        occurrences <= 2,
-        "`--limit 2` must emit at most 2 events (saw {occurrences}): {body}",
+    let occurrences = body.matches("01JINJECTLOGSESSION0000000").count();
+    assert_eq!(
+        occurrences, 2,
+        "`--limit 2` must emit exactly 2 session-id lines (saw {occurrences}): {body}",
     );
 }

@@ -55,8 +55,7 @@ const CLAUDE_CODE_SNIPPET: &str = r#"# Claude Code hook registration for Stoa
 /// `stoa-inject-hook` reads the JSON payload Claude Code sends on
 /// stdin and writes a `hookSpecificOutput.additionalContext` JSON
 /// document on stdout. The matcher pins it to fresh sessions
-/// (`startup`); resume / clear / compact get their own hook points
-/// in v0.2 per ARCHITECTURE.md §6.2.
+/// (`startup`).
 const CLAUDE_CODE_INJECT_SESSION_START_SNIPPET: &str = r#"# Claude Code SessionStart injection hook for Stoa
 #
 # Paste the JSON below into your `~/.config/claude-code/settings.json`

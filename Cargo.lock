@@ -1400,7 +1400,6 @@ dependencies = [
  "stoa-cli",
  "stoa-recall",
  "stoa-recall-local-chroma-sqlite",
- "tokio",
  "tracing",
 ]
 

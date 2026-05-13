@@ -182,6 +182,11 @@ fn recent_wiki_entries(wiki_root: &Path) -> Vec<WikiEntry> {
     raw.into_iter().take(MAX_RECENT_WIKI_PAGES).collect()
 }
 
+/// Hard cap on candidate `*.md` files we collect *before* sorting by
+/// mtime. Bounds the worst-case walk on a wiki with thousands of pages
+/// so the hot path stays sub-millisecond on a cold FS cache.
+const MAX_WIKI_CANDIDATES: usize = 256;
+
 fn collect_recent_wiki(wiki_root: &Path) -> Vec<WikiEntry> {
     if !wiki_root.is_dir() {
         return Vec::new();
@@ -190,11 +195,11 @@ fn collect_recent_wiki(wiki_root: &Path) -> Vec<WikiEntry> {
     let cutoff = SystemTime::now()
         .checked_sub(RECENT_WINDOW)
         .unwrap_or(SystemTime::UNIX_EPOCH);
-    walk_wiki_md(wiki_root, &mut accum);
-    accum.retain(|(mtime, _, _)| *mtime >= cutoff);
+    walk_wiki_md(wiki_root, &mut accum, cutoff);
     accum.sort_by_key(|entry| Reverse(entry.0));
     accum
         .into_iter()
+        .take(MAX_RECENT_WIKI_PAGES)
         .map(|(_, p, s)| materialize(&p, s))
         .collect()
 }
@@ -224,19 +229,25 @@ fn strip_yaml_frontmatter(raw: &str) -> &str {
     raw
 }
 
-fn walk_wiki_md(dir: &Path, accum: &mut Vec<(SystemTime, PathBuf, String)>) {
+fn walk_wiki_md(dir: &Path, accum: &mut Vec<(SystemTime, PathBuf, String)>, cutoff: SystemTime) {
+    if accum.len() >= MAX_WIKI_CANDIDATES {
+        return;
+    }
     let Ok(read) = fs::read_dir(dir) else { return };
     for entry in read.flatten() {
+        if accum.len() >= MAX_WIKI_CANDIDATES {
+            return;
+        }
         let path = entry.path();
         if path.is_dir() {
-            walk_wiki_md(&path, accum);
+            walk_wiki_md(&path, accum, cutoff);
             continue;
         }
-        try_record_md(&path, accum);
+        try_record_md(&path, accum, cutoff);
     }
 }
 
-fn try_record_md(path: &Path, accum: &mut Vec<(SystemTime, PathBuf, String)>) {
+fn try_record_md(path: &Path, accum: &mut Vec<(SystemTime, PathBuf, String)>, cutoff: SystemTime) {
     if path.extension().and_then(|e| e.to_str()) != Some("md") {
         return;
     }
@@ -248,6 +259,9 @@ fn try_record_md(path: &Path, accum: &mut Vec<(SystemTime, PathBuf, String)>) {
     }
     let Ok(meta) = fs::metadata(path) else { return };
     let Ok(mtime) = meta.modified() else { return };
+    if mtime < cutoff {
+        return;
+    }
     accum.push((mtime, path.to_path_buf(), stem.to_owned()));
 }
 

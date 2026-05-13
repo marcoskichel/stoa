@@ -2,12 +2,12 @@
 //!
 //! BM25-only on purpose: the `IpcBackend` requires the Python sidecar,
 //! which the inject hook MUST NOT depend on (the hook runs synchronously
-//! at session start, sub-10ms p95). When the sidecar lands an
-//! always-available recall path, this module switches over.
+//! at session start, sub-10ms p95). The sync `Bm25Backend::search_bm25`
+//! is called directly to avoid building a `tokio` runtime per query.
 
 use std::path::Path;
 
-use stoa_recall::{Filters, Hit, RecallBackend, StreamSet};
+use stoa_recall::Hit;
 use stoa_recall_local_chroma_sqlite::Bm25Backend;
 
 /// Number of BM25 hits to ask for. Token-budget cap downstream
@@ -52,22 +52,7 @@ fn iterate_ladder(backend: &Bm25Backend, ladder: &[String], primary: String) -> 
 }
 
 fn run_search(backend: &Bm25Backend, query: &str) -> Vec<Hit> {
-    let rt = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(rt) => rt,
-        Err(e) => {
-            tracing::warn!(?e, "inject: tokio runtime build failed");
-            return Vec::new();
-        },
-    };
-    let result = rt.block_on(async {
-        backend
-            .search(query, RECALL_K, &Filters::default(), StreamSet::all())
-            .await
-    });
-    match result {
+    match backend.search_bm25(query, RECALL_K) {
         Ok(hits) => hits,
         Err(e) => {
             tracing::warn!(?e, "inject: bm25 search failed");
