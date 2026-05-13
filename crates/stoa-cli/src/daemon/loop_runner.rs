@@ -4,7 +4,16 @@
 //! `stoa_capture::drain_once` (wrapped in `spawn_blocking`). The shutdown
 //! token cancels on SIGINT / SIGTERM and the task tracker waits for every
 //! worker to finish its current row before exiting.
+//!
+//! Two pools share the same cancellation token + tracker:
+//!
+//! - `workers` capture pool — each task drains the `"capture"` lane via
+//!   [`stoa_capture::drain_once_with`].
+//! - one dedicated recall task — drains the `"recall.request"` lane via
+//!   [`crate::daemon::recall_drain::drain_one`] so wiki edits do not
+//!   accumulate forever waiting on a `--once` invocation.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,6 +23,8 @@ use stoa_queue::Queue;
 use tokio::runtime::Builder;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
+
+use crate::daemon::recall_drain;
 
 /// Initial poll interval (matches the M3 research note).
 const MIN_BACKOFF: Duration = Duration::from_millis(1);
@@ -43,6 +54,7 @@ async fn run_workers(cfg: WorkerConfig, workers: usize) -> anyhow::Result<()> {
     for _ in 0..workers {
         spawn_one(&tracker, &cancel, cfg.clone())?;
     }
+    spawn_recall(&tracker, &cancel, &cfg)?;
     tracker.close();
     wait_for_shutdown(&cancel).await;
     tracker.wait().await;
@@ -57,6 +69,24 @@ fn spawn_one(
     let token = cancel.clone();
     let queue = Arc::new(Queue::init(&cfg.queue_path).context("opening per-worker queue")?);
     tracker.spawn(async move { worker_loop(queue, cfg, token).await });
+    Ok(())
+}
+
+/// Spawn a single dedicated drainer for the `recall.request` lane.
+///
+/// Shares the runtime + cancellation token with the capture pool so
+/// shutdown is graceful (a recall row in progress completes before
+/// SIGINT teardown returns).
+fn spawn_recall(
+    tracker: &TaskTracker,
+    cancel: &CancellationToken,
+    cfg: &WorkerConfig,
+) -> anyhow::Result<()> {
+    let token = cancel.clone();
+    let queue =
+        Arc::new(Queue::init(&cfg.queue_path).context("opening recall-drain queue handle")?);
+    let workspace_root = cfg.workspace_root.clone();
+    tracker.spawn(async move { recall_loop(queue, workspace_root, token).await });
     Ok(())
 }
 
@@ -83,6 +113,30 @@ async fn tick_once(queue: &Arc<Queue>, cfg: &WorkerConfig) -> anyhow::Result<boo
     let outcome =
         tokio::task::spawn_blocking(move || stoa_capture::drain_once_with(&q, &cfg)).await??;
     Ok(outcome.is_some())
+}
+
+/// Drain loop for the `recall.request` lane (wiki edits → BM25 reindex).
+async fn recall_loop(queue: Arc<Queue>, workspace_root: PathBuf, cancel: CancellationToken) {
+    let mut backoff = MIN_BACKOFF;
+    while !cancel.is_cancelled() {
+        backoff = match recall_tick(&queue, workspace_root.as_path()).await {
+            Ok(true) => MIN_BACKOFF,
+            Ok(false) => next_backoff(backoff),
+            Err(e) => {
+                tracing::warn!(error = %e, "recall.request drain failed");
+                next_backoff(backoff)
+            },
+        };
+        if sleep_or_cancel(&cancel, backoff).await {
+            return;
+        }
+    }
+}
+
+async fn recall_tick(queue: &Arc<Queue>, workspace_root: &Path) -> anyhow::Result<bool> {
+    let q = Arc::clone(queue);
+    let root = workspace_root.to_path_buf();
+    tokio::task::spawn_blocking(move || recall_drain::drain_one(&root, &q)).await?
 }
 
 /// Increment the idle-at-max counter; once it crosses
