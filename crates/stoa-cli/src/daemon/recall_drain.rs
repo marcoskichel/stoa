@@ -86,8 +86,19 @@ fn process(workspace_root: &Path, row: &ClaimedRow) -> anyhow::Result<()> {
         .unwrap_or(serde_json::Value::Null);
     match method {
         "index_page" => index_one_page(workspace_root, &args),
+        "remove_page" => remove_one_page(workspace_root, &args),
         other => Err(anyhow!("unsupported recall.request method `{other}`")),
     }
+}
+
+fn remove_one_page(workspace_root: &Path, args: &serde_json::Value) -> anyhow::Result<()> {
+    let page_id = args
+        .get("page_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("recall.request.remove_page missing `page_id`"))?;
+    let bm25 = open_bm25(workspace_root)?;
+    bm25.delete(page_id)
+        .map_err(|e| anyhow!("delete `{page_id}`: {e}"))
 }
 
 fn index_one_page(workspace_root: &Path, args: &serde_json::Value) -> anyhow::Result<()> {

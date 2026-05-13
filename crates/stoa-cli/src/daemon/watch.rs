@@ -70,20 +70,27 @@ fn handle_event(
         },
     };
     for ev in events {
-        if !is_relevant(ev.event.kind) {
+        let Some(method) = method_for_event(ev.event.kind) else {
             continue;
-        }
+        };
         for path in &ev.event.paths {
             if let Some(rel) = relative_md(workspace_root, path) {
-                enqueue_index(queue, &rel);
+                enqueue(queue, method, &rel);
             }
         }
     }
 }
 
-fn is_relevant(kind: EventKind) -> bool {
-    matches!(kind, EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_))
+/// Map a notify event kind to the recall method we want the daemon to
+/// run, or `None` to drop the event entirely.
+fn method_for_event(kind: EventKind) -> Option<&'static str> {
+    match kind {
+        EventKind::Create(_) | EventKind::Modify(_) => Some("index_page"),
+        EventKind::Remove(_) => Some("remove_page"),
+        _ => None,
+    }
 }
+
 
 fn relative_md(workspace_root: &Path, abs: &Path) -> Option<String> {
     if abs.extension().is_none_or(|e| e != "md") {
@@ -122,14 +129,17 @@ fn is_symlink_or_under_symlink(abs: &Path) -> bool {
     false
 }
 
-fn enqueue_index(queue: &Arc<Queue>, rel_path: &str) {
+fn enqueue(queue: &Arc<Queue>, method: &str, rel_path: &str) {
     let payload = serde_json::json!({
-        "method": "index_page",
-        "args": {"path": rel_path},
+        "method": method,
+        "args": {"path": rel_path, "page_id": page_id_from_rel(rel_path)},
     });
-    let session_id = page_id_from_rel(rel_path);
-    if let Err(e) = queue.insert_lane("recall.request", "wiki.page.written", &session_id, &payload)
-    {
+    let event = match method {
+        "remove_page" => "wiki.page.removed",
+        _ => "wiki.page.written",
+    };
+    let session_id = format!("{method}:{}", page_id_from_rel(rel_path));
+    if let Err(e) = queue.insert_lane("recall.request", event, &session_id, &payload) {
         tracing::warn!(error = %e, "wiki watcher enqueue failed");
     }
 }
