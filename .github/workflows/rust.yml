@@ -31,6 +31,11 @@ jobs:
       - name: cargo fmt --check
         run: cargo fmt --all --check
 
+      - name: probe lock drift (debug)
+        run: |
+          cargo update --workspace --dry-run --verbose || true
+          cargo tree -e features --workspace --depth 0 || true
+          cargo --version
       - name: cargo fetch (validate lockfile)
         run: cargo fetch --locked
 
