@@ -145,18 +145,54 @@ release target:
     esac
     host=$(rustc -vV | awk '/host:/{print $2}')
     if [ "$triple" = "$host" ]; then
-        cargo build --release --locked --target "$triple" -p stoa-cli
-        cargo build --release --locked --target "$triple" -p stoa-hooks
+        builder=(cargo build)
     else
-        cross build --release --locked --target "$triple" -p stoa-cli
-        cross build --release --locked --target "$triple" -p stoa-hooks
+        builder=(cross build)
     fi
+    "${builder[@]}" --release --locked --target "$triple" -p stoa-cli
+    "${builder[@]}" --release --locked --target "$triple" -p stoa-hooks
+    "${builder[@]}" --release --locked --target "$triple" -p stoa-inject-hooks
     mkdir -p dist
     ext=""
     case "$triple" in *windows*) ext=".exe" ;; esac
     tar -czf "dist/stoa-${triple}.tar.gz" \
-        -C "target/${triple}/release" "stoa${ext}" "stoa-hook${ext}"
+        -C "target/${triple}/release" \
+        "stoa${ext}" "stoa-hook${ext}"
     ls -lh "dist/stoa-${triple}.tar.gz"
+
+# Verify a release tarball contains every binary the install docs
+# promise — the gate that protects v0.1 release tarballs from quietly
+# dropping a binary (capture, inject, or CLI). Builds the tarball via
+# `just release <target>` and then inspects its contents.
+release-verify target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just release {{target}}
+    case "{{target}}" in
+        linux-x86_64)        triple="x86_64-unknown-linux-gnu" ;;
+        linux-aarch64)       triple="aarch64-unknown-linux-gnu" ;;
+        windows-x86_64)      triple="x86_64-pc-windows-msvc" ;;
+        macos-x86_64)        triple="x86_64-apple-darwin" ;;
+        macos-aarch64)       triple="aarch64-apple-darwin" ;;
+        *)                   triple="{{target}}" ;;
+    esac
+    ext=""
+    case "$triple" in *windows*) ext=".exe" ;; esac
+    tarball="dist/stoa-${triple}.tar.gz"
+    expected=("stoa${ext}" "stoa-hook${ext}")
+    contents="$(tar -tzf "$tarball")"
+    errors=0
+    for bin in "${expected[@]}"; do
+        if ! grep -qxF "$bin" <<< "$contents"; then
+            echo "release-verify: ${tarball} missing binary: ${bin}" >&2
+            errors=$((errors + 1))
+        fi
+    done
+    if [ "$errors" -gt 0 ]; then
+        echo "release-verify: ${errors} missing binary(ies)" >&2
+        exit 1
+    fi
+    echo "release-verify: ${tarball} contains all expected binaries"
 
 # --------------------------------------------------------------------------
 # CI gates
