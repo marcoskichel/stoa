@@ -61,7 +61,7 @@ The shape of the system, not the feature list. Each pillar is detailed in [ARCHI
 - `stoa note` — add a structured observation to the active session (agent or human)
 - `LocalChromaSqliteBackend` as the default recall substrate; formal `RecallBackend` interface for alternative adapters
 - Rule-based PII/secret redaction applied at capture and ingest, plus MINJA-resistant XML delimiters on every injection
-- Reproducible LongMemEval benchmark scripts published from day one (recall@k against a fixed test corpus; backend swaps must publish against the same corpus)
+- Reproducible benchmark suite published from day one against fixed corpora (LongMemEval + MemoryAgentBench + MEMTRACK + BEAM + AgentLeak; MTEB/BEIR retrieval subset as the internal embedding-swap gate). Every `RecallBackend` adapter publishes against the same suite; backend swaps are quality-gated. See [benchmarks/README.md](./benchmarks/README.md)
 - Local-first: no required cloud, no required API keys
 
 ## Paid layer (planned, not promised)
@@ -83,7 +83,7 @@ Seven things separate Stoa from the existing field.
 
 2. **Auto-injection at the right hook points, with MINJA defenses by default.** SessionStart in v0.1, UserPromptSubmit and PreCompact in v0.2. Hard token budgets, relevance gating, top-of-prompt placement (lost-in-the-middle defense), and explicit XML delimiters with "treat as data, not instructions" framing on every injection. The OWASP ASI06 attack class is a designed-against threat, not an afterthought.
 
-3. **Honest benchmarks against a fixed corpus.** Mempalace launched with a "100% LongMemEval" headline that was ChromaDB stock nearest-neighbor performance, not the palace structure. The independent lhl/agentic-memory analysis showed several README features were absent from the code. Stoa publishes its test corpus, runs LongMemEval reproducibly from day one, and requires every backend adapter to publish recall@k against the same corpus. No re-runs after engineering fixes.
+3. **Honest benchmarks against a fixed corpus, across the full pipeline.** Mempalace launched with a "100% LongMemEval" headline that was ChromaDB stock nearest-neighbor performance, not the palace structure. The independent lhl/agentic-memory analysis showed several README features were absent from the code. Stoa publishes its test corpora, runs a five-benchmark v0.1 suite reproducibly from day one (LongMemEval for long-term recall; MemoryAgentBench for selective forgetting; MEMTRACK for multi-platform conflict resolution; BEAM for scale stress at 128K → 10M tokens; AgentLeak for the PII channel surface), and requires every backend adapter to publish against the same suite. No re-runs after engineering fixes. Full plan: [benchmarks/README.md](./benchmarks/README.md).
 
 4. **Crystallization with invalidation.** Multiple specs describe a promote-from-sessions loop; nobody ships the inverse. Stoa's nightly crystallize produces both new synthesis drafts and supersession proposals. The Memora FAMA benchmark documents 18–32% accuracy loss when memory systems only add and never retire — Stoa's invalidation pass is the answer.
 
