@@ -5,8 +5,8 @@
 Andrej Karpathy's [LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
 sketched the right shape for an agent's long-term memory: markdown pages, curated by the model itself,
 that compound across sessions. Stoa builds on that pattern — capture every session, distill what matters
-into the wiki, feed the relevant pages back into the next session — all through the platform's existing
-hook surface. Claude Code first; Cursor and Codex next.
+into the wiki, feed the relevant pages back into the next session — all through the agent's existing
+hook surface.
 
 [![CI](https://github.com/marcoskichel/stoa/actions/workflows/rust.yml/badge.svg)](https://github.com/marcoskichel/stoa/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -59,7 +59,7 @@ Three layers, each independently useful:
 > | What ships in v0.1 | What comes later |
 > |---|---|
 > | `stoa init`, `stoa query`, `stoa ingest`, `stoa note` | Harvest + crystallize workers (v0.2) |
-> | Claude Code `Stop` hook capture + PII redaction | Cursor / Codex adapters (v0.3) |
+> | Capture hook + PII redaction | Additional agent adapters (v0.3) |
 > | `LocalChromaSqliteBackend` (vector + BM25 + KG) | MCP wrapper (v0.3) |
 > | SessionStart injection with MINJA-resistant delimiters | UserPromptSubmit / PreCompact injection (v0.2) |
 > | Reproducible benchmark suite (LongMemEval + 4 others) | Web UI (v0.4) |
@@ -88,7 +88,21 @@ cargo install stoa-cli
 The Python sidecar (harvest, crystallize, embeddings) is an implementation detail — it bootstraps
 automatically via `uv` on the first `stoa daemon` run. No manual sidecar management required.
 
-**Platforms:** Linux x86\_64 / aarch64 · macOS x86\_64 / aarch64 · Windows x86\_64
+**Operating systems:** Linux x86\_64 / aarch64 · macOS x86\_64 / aarch64 · Windows x86\_64
+
+---
+
+## Supported agent platforms
+
+| Agent | Integration | Target |
+|---|---|---|
+| Claude Code | `Stop` hook capture · `SessionStart` injection | v0.1 |
+| Cursor | hook adapter planned | v0.3 |
+| Codex | hook adapter planned | v0.3 |
+| Any agent with shell access | manual via `stoa query` / `stoa note` / `stoa ingest` | v0.1 |
+
+The `stoa` CLI works from any shell. Agents that don't yet have a first-class hook integration can still
+read from and write to the wiki through their existing shell tool.
 
 ---
 
@@ -98,13 +112,13 @@ automatically via `uv` on the first `stoa daemon` run. No manual sidecar managem
 # Scaffold a Stoa workspace in your project directory
 stoa init
 
-# Register the Claude Code capture + injection hooks
+# Register capture + injection hooks for your agent (see Supported agent platforms)
 stoa hook install --platform claude-code --inject session-start
 
 # Start the background worker (capture → redact → queue)
 stoa daemon &
 
-# Use Claude Code normally. After a session ends, query what was captured:
+# Use your agent normally. After a session ends, query what was captured:
 stoa query "what did we decide about auth"
 
 # Verify what was injected into your last session
@@ -120,7 +134,7 @@ touched. `stoa query` searches across wiki pages and session transcripts with hy
 ## What's in the OSS core (MIT)
 
 - **`stoa init`** — scaffold workspace (`STOA.md`, `wiki/`, `raw/`, `sessions/`, `.stoa/`, `.gitignore`)
-- **`stoa hook install`** — register capture and injection hooks for Claude Code (Cursor and Codex in v0.3)
+- **`stoa hook install`** — register capture and injection hooks (see [Supported agent platforms](#supported-agent-platforms))
 - **`stoa daemon`** — run capture + harvest + scheduler workers
 - **`stoa ingest`** — ingest URLs, PDFs, markdown, plain text into `raw/`
 - **`stoa query`** — hybrid search across wiki + sessions (any agent, any shell)
