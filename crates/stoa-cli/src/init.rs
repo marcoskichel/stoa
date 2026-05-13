@@ -58,7 +58,9 @@ fn scaffold(root: &Path, no_embeddings: bool) -> anyhow::Result<()> {
     let _conn = stoa_recall_local_chroma_sqlite::ensure_schema(&recall_db)
         .map_err(|e| anyhow::anyhow!("provisioning `recall.db`: {e}"))?;
     if !no_embeddings {
-        let _ignored = root.join(".stoa").join("vectors");
+        let vectors_dir = root.join(".stoa").join("vectors");
+        fs::create_dir_all(&vectors_dir)
+            .with_context(|| format!("creating `{}`", vectors_dir.display()))?;
     }
     Ok(())
 }

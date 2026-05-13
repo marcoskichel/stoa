@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, anyhow};
 use chrono::{SecondsFormat, Utc};
 use stoa_recall::{Filters, Hit, RecallBackend, Stream, StreamSet};
-use stoa_recall_local_chroma_sqlite::Bm25Backend;
+use stoa_recall_local_chroma_sqlite::{Bm25Backend, IpcBackend};
 
 use crate::workspace::Workspace;
 
@@ -94,15 +94,38 @@ fn build_stream_set(streams: &[String]) -> anyhow::Result<StreamSet> {
 }
 
 fn search(ws: &Workspace, query: &str, k: usize, streams: StreamSet) -> anyhow::Result<Vec<Hit>> {
-    let db_path = recall_db_path(ws);
-    let bm25 =
-        Bm25Backend::open(&db_path).with_context(|| format!("opening `{}`", db_path.display()))?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("building tokio runtime")?;
-    let hits = rt.block_on(async { bm25.search(query, k, &Filters::default(), streams).await });
-    hits.map_err(|e| anyhow!("recall search failed: {e}"))
+    if embeddings_enabled(ws) {
+        let backend = open_ipc_backend(ws)?;
+        rt.block_on(async { backend.search(query, k, &Filters::default(), streams).await })
+            .map_err(|e| anyhow!("recall search failed: {e}"))
+    } else {
+        let backend = open_bm25_backend(ws)?;
+        rt.block_on(async { backend.search(query, k, &Filters::default(), streams).await })
+            .map_err(|e| anyhow!("recall search failed: {e}"))
+    }
+}
+
+/// Workspace has embeddings enabled iff `.stoa/vectors/` exists. The
+/// directory is created (or skipped) by `stoa init`; absence means the
+/// user opted into `--no-embeddings` so we stick to BM25-only.
+fn embeddings_enabled(ws: &Workspace) -> bool {
+    ws.root.join(".stoa").join("vectors").is_dir()
+}
+
+fn open_bm25_backend(ws: &Workspace) -> anyhow::Result<Bm25Backend> {
+    let db_path = recall_db_path(ws);
+    Bm25Backend::open(&db_path).with_context(|| format!("opening `{}`", db_path.display()))
+}
+
+fn open_ipc_backend(ws: &Workspace) -> anyhow::Result<IpcBackend> {
+    let db_path = recall_db_path(ws);
+    let queue_path = ws.root.join(".stoa").join("queue.db");
+    IpcBackend::open(&queue_path, &db_path)
+        .with_context(|| format!("opening IPC backend at `{}`", db_path.display()))
 }
 
 fn recall_db_path(ws: &Workspace) -> PathBuf {
