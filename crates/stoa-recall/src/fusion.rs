@@ -12,7 +12,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::hit::{Hit, Metadata};
+use crate::hit::{DocId, Hit, Metadata, SourcePath};
 use crate::stream::Stream;
 
 /// Default RRF constant from Cormack et al. 2009. Smaller `k` weights
@@ -26,7 +26,7 @@ pub const RRF_K: f64 = 60.0;
 /// looks at array index. Ties on RRF score break by `doc_id` ASC.
 #[must_use]
 pub fn rrf_fuse(streams: &[(Stream, Vec<Hit>)], top_k: usize) -> Vec<Hit> {
-    let mut acc: BTreeMap<String, FusedDoc> = BTreeMap::new();
+    let mut acc: BTreeMap<DocId, FusedDoc> = BTreeMap::new();
     for (stream, hits) in streams {
         accumulate_stream(*stream, hits, &mut acc);
     }
@@ -42,10 +42,10 @@ pub fn rrf_fuse(streams: &[(Stream, Vec<Hit>)], top_k: usize) -> Vec<Hit> {
 }
 
 struct FusedDoc {
-    doc_id: String,
+    doc_id: DocId,
     score: f64,
     snippet: String,
-    source_path: String,
+    source_path: SourcePath,
     streams_matched: Vec<Stream>,
     metadata: Metadata,
 }
@@ -63,7 +63,7 @@ impl FusedDoc {
     }
 }
 
-fn accumulate_stream(stream: Stream, hits: &[Hit], acc: &mut BTreeMap<String, FusedDoc>) {
+fn accumulate_stream(stream: Stream, hits: &[Hit], acc: &mut BTreeMap<DocId, FusedDoc>) {
     for (rank0, hit) in hits.iter().enumerate() {
         let rank1 = rank0 + 1;
         #[expect(
@@ -92,7 +92,7 @@ mod tests {
     use crate::hit::Hit;
 
     fn h(id: &str) -> Hit {
-        Hit::single_stream(id.into(), 0.0, String::new(), String::new(), Stream::Bm25)
+        Hit::single_stream(id, 0.0, "", "", Stream::Bm25)
     }
 
     #[test]

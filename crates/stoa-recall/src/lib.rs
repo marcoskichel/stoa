@@ -13,6 +13,6 @@ mod stream;
 mod traits;
 
 pub use fusion::{RRF_K, rrf_fuse};
-pub use hit::{Hit, Metadata};
+pub use hit::{DocId, Hit, Metadata, SourcePath};
 pub use stream::{Stream, StreamSet};
 pub use traits::{Filters, RecallBackend, RecallError, RecallResult};
