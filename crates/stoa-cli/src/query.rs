@@ -78,12 +78,17 @@ fn append_audit_line(log_path: &Path, line: &str) -> std::io::Result<()> {
 }
 
 fn build_stream_set(streams: &[String]) -> anyhow::Result<StreamSet> {
-    if streams.is_empty() {
+    let trimmed: Vec<&str> = streams
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if trimmed.is_empty() {
         return Ok(StreamSet::all());
     }
     let mut set = StreamSet::from_slice(&[]);
-    for s in streams {
-        let parsed = Stream::parse(s.as_str())
+    for s in &trimmed {
+        let parsed = Stream::parse(s)
             .ok_or_else(|| anyhow!("unknown stream `{s}`; expected vector/bm25/graph"))?;
         set.set(parsed);
     }
