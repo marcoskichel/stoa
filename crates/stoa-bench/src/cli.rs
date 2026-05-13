@@ -36,6 +36,15 @@ pub(crate) struct Cli {
     /// Run a 5-question smoke slice to verify the pipeline wiring.
     #[arg(long)]
     pub(crate) smoke: bool,
+
+    /// Stoa workspace root to point the recall backend at.
+    ///
+    /// When set, the bench uses `<workspace>/.stoa/queue.db` and
+    /// `<workspace>/.stoa/recall.db` instead of a per-PID tempdir,
+    /// so a running `stoa daemon` against the same workspace can
+    /// serve vector recall requests via the Python sidecar.
+    #[arg(long)]
+    pub(crate) workspace: Option<PathBuf>,
 }
 
 /// Recall backend implementations.

@@ -21,7 +21,7 @@ use crate::{
 /// Entry point for the benchmark runner.
 pub(crate) async fn run(cli: &Cli) -> Result<(), BenchError> {
     let corpus_dir = resolve_corpus_dir(cli.corpus_dir.clone());
-    let backend = build_backend(&cli.backend)?;
+    let backend = build_backend(cli)?;
     let params = build_params(cli, corpus_dir, backend);
     let results = collect_results(cli, &params).await?;
     write_results(results, cli.output.as_deref())
@@ -36,24 +36,32 @@ fn resolve_corpus_dir(override_: Option<PathBuf>) -> PathBuf {
 /// `LocalChromaSqlite` here resolves to the BM25 leg of the M4 backend
 /// (the IPC leg requires the Python sidecar running). BM25 alone covers
 /// the smoke path and is the M4 default for `--no-embeddings` workspaces.
-fn build_backend(kind: &BackendKind) -> Result<Arc<dyn RecallBackend>, BenchError> {
-    match kind {
+fn build_backend(cli: &Cli) -> Result<Arc<dyn RecallBackend>, BenchError> {
+    match cli.backend {
         BackendKind::NoMemory => Ok(Arc::new(NoopBackend)),
-        BackendKind::LocalChromaSqlite => build_bm25_backend(),
+        BackendKind::LocalChromaSqlite => build_local_backend(cli.workspace.as_deref()),
     }
 }
 
-fn build_bm25_backend() -> Result<Arc<dyn RecallBackend>, BenchError> {
+fn build_local_backend(workspace: Option<&Path>) -> Result<Arc<dyn RecallBackend>, BenchError> {
+    let (queue_db, recall_db) = match workspace {
+        Some(ws) => (ws.join(".stoa/queue.db"), ws.join(".stoa/recall.db")),
+        None => fresh_tempdir_paths()?,
+    };
+    ensure_schema(&recall_db).map_err(|e| BenchError::Backend(e.to_string()))?;
+    let backend =
+        IpcBackend::open(&queue_db, &recall_db).map_err(|e| BenchError::Backend(e.to_string()))?;
+    Ok(Arc::new(backend))
+}
+
+fn fresh_tempdir_paths() -> Result<(PathBuf, PathBuf), BenchError> {
     let dir = std::env::temp_dir().join(format!("stoa-bench-{}", std::process::id()));
     std::fs::create_dir_all(&dir)?;
     let recall_db = dir.join("recall.db");
     let queue_db = dir.join("queue.db");
     drop(std::fs::remove_file(&recall_db));
     drop(std::fs::remove_file(&queue_db));
-    ensure_schema(&recall_db).map_err(|e| BenchError::Backend(e.to_string()))?;
-    let backend =
-        IpcBackend::open(&queue_db, &recall_db).map_err(|e| BenchError::Backend(e.to_string()))?;
-    Ok(Arc::new(backend))
+    Ok((queue_db, recall_db))
 }
 
 fn build_params(cli: &Cli, corpus_dir: PathBuf, backend: Arc<dyn RecallBackend>) -> RunParams {
