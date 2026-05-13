@@ -65,6 +65,11 @@ aho-corasick = "1"
 fancy-regex = "0.13"
 uuid = { version = "1", features = ["v4"] }
 
+# Async + filesystem watch (M4 recall daemon watcher)
+async-trait = "0.1"
+notify = { version = "8", default-features = false, features = ["macos_kqueue"] }
+notify-debouncer-full = { version = "0.6", default-features = false }
+
 # Test stack (dev-only) — see research note in CONTRIBUTING.md
 snapbox = "0.6"
 trycmd = "1.2"

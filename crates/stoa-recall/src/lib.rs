@@ -1,9 +1,18 @@
 //! Stoa `RecallBackend` trait + reciprocal rank fusion.
+//!
+//! Spec source: [ARCHITECTURE.md §6.1] (`RecallBackend` interface).
+//!
+//! This crate is the substrate-free contract layer. Concrete backends live
+//! in sibling crates (`stoa-recall-local-chroma-sqlite` is the v0.1
+//! default). Anything that talks to a `SQLite` or vector store belongs
+//! there, not here.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_version_is_not_empty() {
-        assert!(!env!("CARGO_PKG_VERSION").is_empty());
-    }
-}
+mod fusion;
+mod hit;
+mod stream;
+mod traits;
+
+pub use fusion::{RRF_K, rrf_fuse};
+pub use hit::{Hit, Metadata};
+pub use stream::{Stream, StreamSet};
+pub use traits::{Filters, RecallBackend, RecallError, RecallResult};
