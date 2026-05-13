@@ -24,6 +24,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
+flate2 = { workspace = true }
 
 [dev-dependencies]
 snapbox = { workspace = true }

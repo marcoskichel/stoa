@@ -1,0 +1,34 @@
+{
+  "benchmark": "mteb-retrieval",
+  "backend": "local-chroma-sqlite",
+  "version": "0.1.0",
+  "corpus_rev": "beir-scifact+nfcorpus+fiqa",
+  "scorer_rev": "unknown",
+  "backbone_model": "claude-haiku-4-5-20251001",
+  "hyperparams": {
+    "k": 10,
+    "streams": "bm25"
+  },
+  "metrics": {
+    "ndcg@10": 0.08675945610498718,
+    "ndcg@10:fiqa": 0.026601947497422646,
+    "ndcg@10:nfcorpus": 0.1869979966750137,
+    "ndcg@10:scifact": 0.0466784241425252,
+    "recall@1": 0.03471875323483043,
+    "recall@10": 0.05306362230060215,
+    "recall@100": 0.059478763409706,
+    "recall@100:fiqa": 0.029501028806584364,
+    "recall@100:nfcorpus": 0.10310192808920031,
+    "recall@100:scifact": 0.04583333333333333,
+    "recall@10:fiqa": 0.025385802469135806,
+    "recall@10:nfcorpus": 0.08797173109933731,
+    "recall@10:scifact": 0.04583333333333333,
+    "recall@1:fiqa": 0.018647119341563788,
+    "recall@1:nfcorpus": 0.03967580702959417,
+    "recall@1:scifact": 0.04583333333333333
+  },
+  "cost_usd": 0.0,
+  "tokens_used": 0,
+  "wall_seconds": 1004,
+  "timestamp": "2026-05-13T06:03:03.348530773Z"
+}

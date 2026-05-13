@@ -71,6 +71,9 @@ async-trait = "0.1"
 notify = { version = "8", default-features = false, features = ["macos_kqueue"] }
 notify-debouncer-full = { version = "0.6", default-features = false }
 
+# Compression — gzipped BEIR jsonl support in stoa-bench MTEB adapter
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
 # Test stack (dev-only) — see research note in CONTRIBUTING.md
 snapbox = "1.2"
 trycmd = "1.2"

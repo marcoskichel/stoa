@@ -38,10 +38,10 @@ benchmarks/spike-m0/**/build-*.log
 
 # Downloaded benchmark corpora — only the shell scripts ship in-tree; raw
 # data lives under `benchmarks/corpus/<name>/data/` and is fetched on
-# demand by `benchmarks/corpus/<name>.sh`.
-benchmarks/corpus/*/data/
-benchmarks/corpus/*/.version
-benchmarks/corpus/*/.commit
+# demand by `benchmarks/corpus/<name>.sh`. Use the broader `*/` glob to
+# catch any layout (data/, .version, .commit, etc.). Fixtures under
+# `benchmarks/<name>/fixtures/` ARE committed; they live outside corpus/.
+benchmarks/corpus/*/
 
 .fastembed_cache/
 
@@ -50,6 +50,10 @@ dist/
 
 # Local dev workspace
 .stoa-dev/
+
+# Per-workspace stoa state (recall.db, queue.db). Created by `stoa daemon`,
+# `stoa-bench --workspace .`, etc. Never committed.
+.stoa/
 
 # uv lock backup
 uv.lock.bak
