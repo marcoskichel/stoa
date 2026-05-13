@@ -6,6 +6,8 @@ $ stoa --help
 [..]read[..]
 [..]write[..]
 [..]schema[..]
+[..]query[..]
+[..]index[..]
 [..]
 
 ```

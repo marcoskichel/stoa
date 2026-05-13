@@ -38,10 +38,7 @@ fn query_subcommand_exists_in_help() {
     let ws = workspace();
     let out = stoa(&ws, &["--help"]);
     let body = stdout(&out);
-    assert!(
-        body.contains("query"),
-        "`stoa --help` must list the `query` subcommand: {body}",
-    );
+    assert!(body.contains("query"), "`stoa --help` must list the `query` subcommand: {body}");
 }
 
 #[test]
@@ -56,6 +53,10 @@ fn query_outside_workspace_exits_non_zero() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "End-to-end test pinning the JSON shape; assertions are part of the spec."
+)]
 fn query_returns_ranked_hits_with_resolvable_source_paths() {
     let ws = workspace();
     init(&ws);
@@ -70,16 +71,22 @@ fn query_returns_ranked_hits_with_resolvable_source_paths() {
     let body = stdout(&out);
     let parsed: serde_json::Value =
         serde_json::from_str(&body).expect("query --json must emit valid JSON");
-    let hits = parsed.get("hits").and_then(|v| v.as_array()).expect(
-        "JSON output must include a top-level `hits` array per ARCHITECTURE §6.1",
+    let hits = parsed
+        .get("hits")
+        .and_then(|v| v.as_array())
+        .expect("JSON output must include a top-level `hits` array per ARCHITECTURE §6.1");
+    assert!(
+        !hits.is_empty(),
+        "non-empty corpus + matching query must return at least one hit"
     );
-    assert!(!hits.is_empty(), "non-empty corpus + matching query must return at least one hit");
     for hit in hits {
         let source_path = hit
             .get("source_path")
             .and_then(|v| v.as_str())
             .expect("each hit must carry a `source_path`");
-        let absolute = ws.path().join(source_path.strip_prefix("./").unwrap_or(source_path));
+        let absolute = ws
+            .path()
+            .join(source_path.strip_prefix("./").unwrap_or(source_path));
         assert!(
             absolute.exists() || std::path::Path::new(source_path).exists(),
             "`source_path` `{source_path}` must resolve to a real file (ARCH §6.1)",

@@ -20,7 +20,11 @@ use common::{exists, init, stderr, stoa, workspace, write_file};
 fn init_accepts_no_embeddings_flag() {
     let ws = workspace();
     let out = stoa(&ws, &["init", "--no-embeddings"]);
-    assert!(out.status.success(), "`stoa init --no-embeddings` must succeed: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "`stoa init --no-embeddings` must succeed: {}",
+        stderr(&out)
+    );
 }
 
 #[test]

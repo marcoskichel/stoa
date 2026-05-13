@@ -41,7 +41,10 @@ Postgres is a relational database.
 fn index_rebuild_subcommand_exists() {
     let ws = workspace();
     let out = stoa(&ws, &["index", "--help"]);
-    assert!(out.status.success() || !out.stderr.is_empty(), "`stoa index` subcommand must exist");
+    assert!(
+        out.status.success() || !out.stderr.is_empty(),
+        "`stoa index` subcommand must exist"
+    );
 }
 
 #[test]
@@ -74,7 +77,9 @@ fn index_rebuild_indexes_wiki_pages() {
     let hits = parsed.get("hits").and_then(|v| v.as_array()).unwrap();
     assert!(
         hits.iter().any(|h| {
-            h.get("source_path").and_then(|v| v.as_str()).is_some_and(|p| p.contains("postgres"))
+            h.get("source_path")
+                .and_then(|v| v.as_str())
+                .is_some_and(|p| p.contains("postgres"))
         }),
         "post-rebuild query must surface the indexed page; got {hits:?}",
     );
@@ -140,5 +145,8 @@ fn count_hits(ws: &assert_fs::TempDir, q: &str) -> usize {
         Ok(v) => v,
         Err(_) => return 0,
     };
-    parsed.get("hits").and_then(|v| v.as_array()).map_or(0, Vec::len)
+    parsed
+        .get("hits")
+        .and_then(|v| v.as_array())
+        .map_or(0, Vec::len)
 }
