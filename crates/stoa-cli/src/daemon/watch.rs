@@ -45,7 +45,7 @@ pub(crate) fn spawn_watcher(
         DEBOUNCE_WINDOW,
         None,
         move |result: Result<Vec<DebouncedEvent>, Vec<notify::Error>>| {
-            handle_event(&workspace_owned, &queue, result);
+            catch_unwind_handle_event(&workspace_owned, &queue, result);
         },
     )
     .context("starting wiki watcher")?;
@@ -53,6 +53,33 @@ pub(crate) fn spawn_watcher(
         .watch(wiki_dir.as_path(), RecursiveMode::Recursive)
         .map_err(translate_watcher_error)?;
     Ok(debouncer)
+}
+
+/// Wrap `handle_event` in `catch_unwind` so a panic inside the
+/// notify-thread closure is logged + swallowed instead of unwinding
+/// across the FFI boundary into `notify-debouncer-full` (UB).
+fn catch_unwind_handle_event(
+    workspace_root: &Path,
+    queue: &Arc<Queue>,
+    result: Result<Vec<DebouncedEvent>, Vec<notify::Error>>,
+) {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_event(workspace_root, queue, result);
+    }));
+    if let Err(payload) = outcome {
+        let msg = panic_message(&payload);
+        tracing::error!(panic = %msg, "wiki watcher callback panicked; event dropped");
+    }
+}
+
+fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        return (*s).to_owned();
+    }
+    if let Some(s) = payload.downcast_ref::<String>() {
+        return s.clone();
+    }
+    "(non-string panic payload)".to_owned()
 }
 
 fn handle_event(
