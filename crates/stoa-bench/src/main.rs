@@ -10,6 +10,7 @@ mod adapters;
 mod backends;
 mod cli;
 mod error;
+mod report;
 mod result;
 mod run;
 

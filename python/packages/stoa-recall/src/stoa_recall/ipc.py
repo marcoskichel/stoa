@@ -217,4 +217,5 @@ class FailureResponse(BaseModel):
 
 
 REQUEST_LANE: str = "recall.request"
+SEARCH_LANE: str = "recall.search"
 RESPONSE_LANE: str = "recall.response"

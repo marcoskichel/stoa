@@ -35,6 +35,13 @@ fn stoa_bench_longmemeval_smoke_emits_result_file() {
         written.iter().any(|f| f.contains("longmemeval")),
         "expected a longmemeval result file, found: {written:?}",
     );
+    assert!(
+        written
+            .iter()
+            .any(|f| Path::new(f).extension().is_some_and(|e| e == "md")
+                && f.contains("longmemeval")),
+        "expected longmemeval .md file, found: {written:?}",
+    );
 }
 
 fn run_smoke(out_dir: &str) -> std::io::Result<Output> {

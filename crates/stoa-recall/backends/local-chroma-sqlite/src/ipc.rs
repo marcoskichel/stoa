@@ -2,9 +2,15 @@
 //!
 //! Lanes:
 //!
-//! - `recall.request` — Rust → Python. `event` names the method
-//!   (`recall.search`, `recall.index_page`, `recall.health_check`, ...);
-//!   payload carries `{method, args, deadline_unix_ms}`.
+//! - `recall.request` — Rust → Python for write-side ops
+//!   (`recall.index_page`, `recall.remove`, `recall.health_check`).
+//!   Also drained by the Rust daemon for BM25 reindex on `index_page`
+//!   / `remove_page` so single-stream queries succeed without the
+//!   sidecar.
+//! - `recall.search` — Rust → Python for read-side ops only. The Rust
+//!   daemon never claims this lane; only the Python sidecar drains it.
+//!   Splitting reads from writes prevents a daemon-claim → release
+//!   livelock when the sidecar is offline.
 //! - `recall.response` — Python → Rust. `session_id` is the original
 //!   `request_id`; payload is `{ok, result, error?}`.
 //!
@@ -25,9 +31,20 @@ use uuid::Uuid;
 
 use crate::bm25::Bm25Backend;
 
-/// Lane the Rust caller writes onto. Python `stoa-recall.worker` claims
-/// rows from this lane.
+/// Write-side request lane (`index_page`, `remove`, `health_check`).
+///
+/// Drained by both the Rust daemon (BM25 reindex) and the Python
+/// sidecar (vector / KG ack); rows on this lane are routable to either
+/// pool by `method`.
 pub const REQUEST_LANE: &str = "recall.request";
+
+/// Read-side request lane (`search` only).
+///
+/// Drained exclusively by the Python sidecar. The Rust daemon never
+/// claims this lane — if the sidecar is offline the row stays pending
+/// until the request timeout expires, then the caller degrades to
+/// BM25-only via the in-process fallback path.
+pub const SEARCH_LANE: &str = "recall.search";
 
 /// Lane the Python sidecar writes onto with the result.
 pub const RESPONSE_LANE: &str = "recall.response";
@@ -113,28 +130,37 @@ impl IpcBackend {
             .map_err(|e| RecallError::Other(format!("re-enqueue remove: {e}")))
     }
 
-    /// Send `payload` on the request lane, await the response, return the
-    /// raw `result` JSON.
-    async fn round_trip(
-        &self,
-        event: &'static str,
-        method: &'static str,
-        args: serde_json::Value,
-        timeout: Duration,
-    ) -> Result<serde_json::Value, RecallError> {
+    /// Send the request described by `call` on its lane, await the
+    /// response, return the raw `result` JSON.
+    ///
+    /// `call.lane` selects which sidecar pool will service the row.
+    /// Reads (`search`) MUST use [`SEARCH_LANE`] so they bypass the
+    /// Rust daemon; writes (`index_page`, `remove`, `health_check`)
+    /// use [`REQUEST_LANE`] so the Rust daemon can ack the BM25-only
+    /// path without the Python sidecar.
+    async fn round_trip(&self, call: RoundTrip) -> Result<serde_json::Value, RecallError> {
         let request_id = Uuid::new_v4().to_string();
-        let deadline_ms = unix_ms_now().saturating_add(timeout.as_millis());
+        let deadline_ms = unix_ms_now().saturating_add(call.timeout.as_millis());
         let payload = RequestPayload {
-            method,
-            args,
+            method: call.method,
+            args: call.args,
             deadline_unix_ms: deadline_ms,
         };
         let json = serde_json::to_value(&payload)?;
         self.queue
-            .insert_lane(REQUEST_LANE, event, &request_id, &json)
+            .insert_lane(call.lane, call.event, &request_id, &json)
             .map_err(|e| RecallError::Other(format!("queue insert: {e}")))?;
-        await_response(&self.queue, &request_id, timeout).await
+        await_response(&self.queue, &request_id, call.timeout).await
     }
+}
+
+/// Parameters for one `round_trip` IPC call.
+struct RoundTrip {
+    lane: &'static str,
+    event: &'static str,
+    method: &'static str,
+    args: serde_json::Value,
+    timeout: Duration,
 }
 
 fn unix_ms_now() -> u128 {
@@ -220,10 +246,14 @@ impl RecallBackend for IpcBackend {
     async fn remove(&self, doc_id: &str) -> Result<(), RecallError> {
         self.bm25.remove(doc_id).await?;
         let args = serde_json::json!({"doc_id": doc_id});
-        if let Err(e) = self
-            .round_trip(REMOVE_EVENT, "remove", args.clone(), DEFAULT_INDEX_TIMEOUT)
-            .await
-        {
+        let call = RoundTrip {
+            lane: REQUEST_LANE,
+            event: REMOVE_EVENT,
+            method: "remove",
+            args: args.clone(),
+            timeout: DEFAULT_INDEX_TIMEOUT,
+        };
+        if let Err(e) = self.round_trip(call).await {
             tracing::warn!(error = %e, "python sidecar remove failed; re-enqueueing");
             self.reenqueue_remove(doc_id, &args)?;
         }
@@ -249,20 +279,28 @@ impl RecallBackend for IpcBackend {
             "filters": filters,
             "streams": streams,
         });
-        match self
-            .round_trip(SEARCH_EVENT, "search", args, DEFAULT_SEARCH_TIMEOUT)
-            .await
-        {
+        let call = RoundTrip {
+            lane: SEARCH_LANE,
+            event: SEARCH_EVENT,
+            method: "search",
+            args,
+            timeout: DEFAULT_SEARCH_TIMEOUT,
+        };
+        match self.round_trip(call).await {
             Ok(v) => parse_hits(&v),
             Err(e) => degrade_to_bm25(&self.bm25, query, k, filters, &e).await,
         }
     }
 
     async fn health_check(&self) -> Result<serde_json::Value, RecallError> {
-        match self
-            .round_trip(HEALTH_EVENT, "health_check", serde_json::json!({}), DEFAULT_HEALTH_TIMEOUT)
-            .await
-        {
+        let call = RoundTrip {
+            lane: REQUEST_LANE,
+            event: HEALTH_EVENT,
+            method: "health_check",
+            args: serde_json::json!({}),
+            timeout: DEFAULT_HEALTH_TIMEOUT,
+        };
+        match self.round_trip(call).await {
             Ok(v) => Ok(v),
             Err(_) => Ok(serde_json::json!({"backend": "ipc", "python": "down"})),
         }

@@ -20,5 +20,5 @@ mod sanitize;
 mod schema;
 
 pub use bm25::Bm25Backend;
-pub use ipc::{IpcBackend, REQUEST_LANE, RESPONSE_LANE};
+pub use ipc::{IpcBackend, REQUEST_LANE, RESPONSE_LANE, SEARCH_LANE};
 pub use schema::{RECALL_DB_FILE, ensure_schema};
