@@ -98,7 +98,9 @@ fn index_single_page(path: &Path, bm25: &Bm25Backend, subdir: &str) -> anyhow::R
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow!("page id missing for `{}`", path.display()))?
         .to_owned();
-    let raw = fs::read_to_string(path).with_context(|| format!("reading `{}`", path.display()))?;
+    let Some(raw) = read_capped(path, MARKDOWN_CAP_BYTES, "markdown")? else {
+        return Ok(());
+    };
     let body = extract_body(&raw, &page_id);
     let source = format!("wiki/{subdir}/{page_id}.md");
     bm25.upsert(&page_id, "page", &source, &body)
@@ -133,7 +135,9 @@ fn index_session_file(path: &Path, bm25: &Bm25Backend) -> anyhow::Result<()> {
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow!("session id missing for `{}`", path.display()))?
         .to_owned();
-    let raw = fs::read_to_string(path).with_context(|| format!("reading `{}`", path.display()))?;
+    let Some(raw) = read_capped(path, JSONL_CAP_BYTES, "jsonl")? else {
+        return Ok(());
+    };
     let body = flatten_jsonl(&raw);
     let source = format!("sessions/{session_id}.jsonl");
     let doc_id = format!("session/{session_id}");
@@ -202,9 +206,46 @@ fn index_one_raw_file(root: &Path, abs: &Path, bm25: &Bm25Backend) -> anyhow::Re
         .strip_prefix(root)
         .with_context(|| format!("`{}` outside `raw/`", abs.display()))?;
     let rel_str = rel.to_string_lossy().into_owned();
-    let body = fs::read_to_string(abs).with_context(|| format!("reading `{}`", abs.display()))?;
+    let cap = if abs.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+        JSONL_CAP_BYTES
+    } else {
+        MARKDOWN_CAP_BYTES
+    };
+    let Some(body) = read_capped(abs, cap, "raw")? else {
+        return Ok(());
+    };
     let doc_id = format!("raw/{rel_str}");
     let source = format!("raw/{rel_str}");
     bm25.upsert(&doc_id, "raw", &source, &body)
         .map_err(|e| anyhow!("upsert raw `{rel_str}`: {e}"))
+}
+
+/// 5 MiB cap on markdown / general text inputs. Anything larger is
+/// almost certainly a corrupt write or an attacker probing for OOM —
+/// real wiki pages and notes top out in the hundreds of KiB.
+const MARKDOWN_CAP_BYTES: u64 = 5 * 1024 * 1024;
+
+/// 50 MiB cap on session JSONL inputs. Sessions are line-delimited
+/// turns; even very long agent runs stay well below this ceiling.
+const JSONL_CAP_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Read `path` only if its on-disk size is `<= cap_bytes`. Oversize
+/// files are skipped + logged with the file kind so operators can
+/// spot the cause in the daemon log.
+fn read_capped(path: &Path, cap_bytes: u64, kind: &str) -> anyhow::Result<Option<String>> {
+    let meta = fs::metadata(path)
+        .with_context(|| format!("stat `{}`", path.display()))?;
+    if meta.len() > cap_bytes {
+        tracing::warn!(
+            path = %path.display(),
+            kind,
+            size_bytes = meta.len(),
+            cap_bytes,
+            "skipping oversized file in index rebuild",
+        );
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("reading `{}`", path.display()))?;
+    Ok(Some(raw))
 }
