@@ -77,13 +77,48 @@ Three workflows:
 - `.github/workflows/python.yml` — ruff lint+format check + basedpyright + length caps + pytest on Linux/macOS.
 - `.github/workflows/release.yml` — runs on tag push; builds release tarballs across 5 targets via a runner matrix (per M0 decision: macOS uses `macos-latest` rather than cross).
 
-## Commits
+## Commits and PR titles
 
-Conventional-ish: `area: brief subject`. See `git log` for the prevailing style.
+Use [Conventional Commits 1.0.0](https://www.conventionalcommits.org/) for
+**both commit messages and PR titles**: `<type>(<scope>)?: <subject>`.
 
-Never commit secrets. Never commit `target/`, `.venv/`, or `dist/` (covered by `.gitignore`).
+- Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`,
+  `chore`, `revert`. Breaking changes append `!` (e.g. `feat!: ...`) and
+  include a `BREAKING CHANGE:` footer.
+- Scope is optional but encouraged when work is crate- or milestone-bound:
+  `feat(stoa-cli): ...`, `chore(M6): ...`.
+- Subject: imperative mood, no trailing period, ≤72 chars.
+
+The `.github/PULL_REQUEST_TEMPLATE.md` repeats the format as an HTML
+comment at the top so authors see it while drafting; the rules live here
+in `CONTRIBUTING.md` so they are reachable from the issue-template contact
+links.
+
+Never commit secrets. Never commit `target/`, `.venv/`, or `dist/` (covered
+by `.gitignore`).
+
+## Changelog
+
+`CHANGELOG.md` follows
+[keep-a-changelog 1.1.0](https://keepachangelog.com/en/1.1.0/):
+
+- Keep an `## [Unreleased]` section at the top of the file *at all times*.
+  After tagging a release, do **not** rename `[Unreleased]` — add a new
+  `## [<version>] - <YYYY-MM-DD>` section *below* it and leave
+  `[Unreleased]` empty.
+- `scripts/check-changelog.sh` (run by `just check-changelog`, wired into
+  `just ci-rust`) derives the required-milestone list from `ROADMAP.md`.
+  When you add a new milestone heading there, the gate requires a
+  matching `Mn` reference in `CHANGELOG.md` automatically — no script
+  edit needed.
 
 ## Release flow
 
-1. Bump versions across `Cargo.toml` workspace and every `pyproject.toml`.
-2. Tag `v0.X.Y` and push. `release.yml` builds and attaches the tarballs.
+1. Update `CHANGELOG.md`: insert a new `## [<version>] - <YYYY-MM-DD>`
+   section *below* `[Unreleased]`, move all `[Unreleased]` entries into
+   it, leave `[Unreleased]` empty.
+2. Bump versions across the `Cargo.toml` workspace and every
+   `pyproject.toml`.
+3. Run `just ci` to confirm the changelog gate, lints, and tests stay
+   green.
+4. Tag `v0.X.Y` and push. `release.yml` builds and attaches the tarballs.

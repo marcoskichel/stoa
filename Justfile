@@ -79,6 +79,11 @@ file-length:
     ./scripts/check-file-length.sh crates
     ./scripts/check_lengths.py
 
+# CHANGELOG + issue/PR-template invariants — every shipped milestone
+# (M0..Mn) must be referenced; community on-ramp files must exist.
+check-changelog:
+    ./scripts/check-changelog.sh
+
 deny:
     cargo deny --all-features check
 
@@ -162,7 +167,7 @@ release target:
 # CI gates
 # --------------------------------------------------------------------------
 
-ci-rust: lint lint-docs file-length
+ci-rust: lint lint-docs file-length check-changelog
     cargo build --workspace --locked
     cargo test --workspace --locked
     just e2e
