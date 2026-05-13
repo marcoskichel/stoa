@@ -126,6 +126,31 @@ fn index_rebuild_is_idempotent() {
 }
 
 #[test]
+fn index_rebuild_indexes_raw_text_files() {
+    let ws = workspace();
+    init(&ws);
+    write_file(
+        &ws,
+        "raw/ingest/notes.md",
+        "Apache Cassandra is a distributed wide-column store.\n",
+    );
+    let rebuilt = stoa(&ws, &["index", "rebuild"]);
+    assert!(rebuilt.status.success(), "{}", stderr(&rebuilt));
+    let out = stoa(&ws, &["query", "cassandra", "--json", "--streams", "bm25"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let parsed: serde_json::Value = serde_json::from_str(&common::stdout(&out)).unwrap();
+    let hits = parsed.get("hits").and_then(|v| v.as_array()).unwrap();
+    assert!(
+        hits.iter().any(|h| {
+            h.get("source_path")
+                .and_then(|v| v.as_str())
+                .is_some_and(|p| p.starts_with("raw/"))
+        }),
+        "ARCHITECTURE §1: raw/ MUST contribute to the rebuild — got {hits:?}",
+    );
+}
+
+#[test]
 fn index_rebuild_drops_pages_deleted_on_disk() {
     let ws = workspace();
     init(&ws);

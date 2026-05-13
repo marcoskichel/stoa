@@ -29,6 +29,7 @@ pub(crate) fn rebuild() -> anyhow::Result<()> {
         .map_err(|e| anyhow!("truncating recall.db: {e}"))?;
     reindex_wiki(&ws, &bm25)?;
     reindex_sessions(&ws, &bm25)?;
+    reindex_raw(&ws, &bm25)?;
     Ok(())
 }
 
@@ -38,7 +39,8 @@ pub(crate) fn reindex_via_full_rebuild(workspace_root: &Path) -> anyhow::Result<
     let ws = Workspace::find_from(workspace_root).context("locating Stoa workspace")?;
     let bm25 = open_bm25(&ws)?;
     reindex_wiki(&ws, &bm25)?;
-    reindex_sessions(&ws, &bm25)
+    reindex_sessions(&ws, &bm25)?;
+    reindex_raw(&ws, &bm25)
 }
 
 /// Re-index one wiki page. Daemon helper used by the watcher when a
@@ -159,4 +161,50 @@ fn extract_text(line: &str) -> Option<String> {
         .get("text")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned)
+}
+
+/// Walk `raw/` and index every text file (markdown, txt, csv, json,
+/// jsonl, yaml). Binary files (PDF, images, ...) are deliberately
+/// skipped — FTS5 cannot tokenize them and the per-file extractor work
+/// belongs in M5 once the document AI pipeline lands.
+fn reindex_raw(ws: &Workspace, bm25: &Bm25Backend) -> anyhow::Result<()> {
+    let dir = ws.root.join("raw");
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    walk_raw(&dir, &dir, bm25)
+}
+
+fn walk_raw(root: &Path, dir: &Path, bm25: &Bm25Backend) -> anyhow::Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("reading `{}`", dir.display()))? {
+        let path = entry?.path();
+        if path.is_dir() {
+            walk_raw(root, &path, bm25)?;
+            continue;
+        }
+        if !is_indexable_text(&path) {
+            continue;
+        }
+        index_one_raw_file(root, &path, bm25)?;
+    }
+    Ok(())
+}
+
+fn is_indexable_text(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("md" | "txt" | "csv" | "json" | "jsonl" | "yaml" | "yml" | "toml" | "log"),
+    )
+}
+
+fn index_one_raw_file(root: &Path, abs: &Path, bm25: &Bm25Backend) -> anyhow::Result<()> {
+    let rel = abs
+        .strip_prefix(root)
+        .with_context(|| format!("`{}` outside `raw/`", abs.display()))?;
+    let rel_str = rel.to_string_lossy().into_owned();
+    let body = fs::read_to_string(abs).with_context(|| format!("reading `{}`", abs.display()))?;
+    let doc_id = format!("raw/{rel_str}");
+    let source = format!("raw/{rel_str}");
+    bm25.upsert(&doc_id, "raw", &source, &body)
+        .map_err(|e| anyhow!("upsert raw `{rel_str}`: {e}"))
 }
