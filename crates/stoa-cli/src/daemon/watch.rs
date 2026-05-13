@@ -15,6 +15,7 @@
 //!   `/proc/sys/fs/inotify/max_user_watches`.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, anyhow};
@@ -35,13 +36,16 @@ pub(crate) fn spawn_watcher(
         std::fs::create_dir_all(&wiki_dir)
             .with_context(|| format!("creating `{}`", wiki_dir.display()))?;
     }
-    let queue_path_owned = queue_path.to_path_buf();
+    let queue = Arc::new(
+        Queue::open(queue_path)
+            .with_context(|| format!("opening queue `{}`", queue_path.display()))?,
+    );
     let workspace_owned = workspace_root.to_path_buf();
     let mut debouncer = new_debouncer(
         DEBOUNCE_WINDOW,
         None,
         move |result: Result<Vec<DebouncedEvent>, Vec<notify::Error>>| {
-            handle_event(&workspace_owned, &queue_path_owned, result);
+            handle_event(&workspace_owned, &queue, result);
         },
     )
     .context("starting wiki watcher")?;
@@ -53,7 +57,7 @@ pub(crate) fn spawn_watcher(
 
 fn handle_event(
     workspace_root: &Path,
-    queue_path: &Path,
+    queue: &Arc<Queue>,
     result: Result<Vec<DebouncedEvent>, Vec<notify::Error>>,
 ) {
     let events = match result {
@@ -71,7 +75,7 @@ fn handle_event(
         }
         for path in &ev.event.paths {
             if let Some(rel) = relative_md(workspace_root, path) {
-                enqueue_index(queue_path, &rel);
+                enqueue_index(queue, &rel);
             }
         }
     }
@@ -118,21 +122,15 @@ fn is_symlink_or_under_symlink(abs: &Path) -> bool {
     false
 }
 
-fn enqueue_index(queue_path: &Path, rel_path: &str) {
+fn enqueue_index(queue: &Arc<Queue>, rel_path: &str) {
     let payload = serde_json::json!({
         "method": "index_page",
         "args": {"path": rel_path},
     });
     let session_id = page_id_from_rel(rel_path);
-    match Queue::open(queue_path) {
-        Ok(q) => {
-            if let Err(e) =
-                q.insert_lane("recall.request", "wiki.page.written", &session_id, &payload)
-            {
-                tracing::warn!(error = %e, "wiki watcher enqueue failed");
-            }
-        },
-        Err(e) => tracing::warn!(error = %e, "wiki watcher could not open queue"),
+    if let Err(e) = queue.insert_lane("recall.request", "wiki.page.written", &session_id, &payload)
+    {
+        tracing::warn!(error = %e, "wiki watcher enqueue failed");
     }
 }
 
