@@ -40,21 +40,16 @@ grep -qiE 'semver|Semantic Versioning' "$changelog" \
 grep -q '^## \[Unreleased\]' "$changelog" \
     || fail "CHANGELOG.md must keep an '## [Unreleased]' section (keep-a-changelog 1.1.0)"
 
-# Derive the required milestone list from ROADMAP.md so the gate
-# does not silently rot when a new milestone is added. Falls back to
-# the hardcoded MVP list if ROADMAP.md is unreadable (treated as a
-# defect because the gate becomes opaque).
-if [ -f "$roadmap" ]; then
-    milestones="$(grep -oE '^### M[0-9]+' "$roadmap" | grep -oE 'M[0-9]+' | sort -u)"
+# Sanity: ROADMAP.md must exist and declare at least one milestone.
+# The post-pivot milestone naming scheme is `## M-<slug>` (e.g.,
+# `## M-Pivot`, `## M-v0.1`). The gate no longer enforces per-milestone
+# mentions in CHANGELOG — that became tautological after the pivot
+# collapsed M0..M5 into one entry.
+if [ ! -f "$roadmap" ]; then
+    fail "missing ROADMAP.md at repo root"
+elif ! grep -qE '^## M-' "$roadmap"; then
+    fail "ROADMAP.md must declare at least one milestone header '## M-<name>'"
 fi
-if [ -z "${milestones:-}" ]; then
-    fail "could not derive milestone list from ROADMAP.md — gate cannot run"
-    milestones="M0 M1 M2 M3 M4 M5 M6"
-fi
-for m in $milestones; do
-    grep -qiE "\\b${m}\\b" "$changelog" \
-        || fail "CHANGELOG.md does not mention milestone ${m} (defined in ROADMAP.md)"
-done
 
 # Issue + PR templates must exist alongside the changelog so the
 # community on-ramp ships as one coherent unit.

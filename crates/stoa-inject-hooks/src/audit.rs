@@ -1,8 +1,8 @@
 //! Append one JSONL row per injection event to `<workspace>/.stoa/audit.log`.
 //!
 //! Best-effort: any IO failure here is logged via `tracing::warn` and
-//! swallowed. Per ARCH §6.2 the audit trail is a post-hoc observability
-//! hook and must NOT fail the user-facing injection path.
+//! swallowed. The audit trail is a post-hoc observability hook and must
+//! NOT fail the user-facing injection path.
 
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -10,12 +10,12 @@ use std::path::Path;
 
 use chrono::{SecondsFormat, Utc};
 
-use crate::payload::SessionStartPayload;
+use crate::payload::HookPayload;
 
 /// Append one structured row.
 pub(crate) fn append(
     log_path: &Path,
-    payload: &SessionStartPayload,
+    payload: &HookPayload,
     query: &str,
     hits: usize,
     additional_context: &str,
@@ -26,12 +26,7 @@ pub(crate) fn append(
     }
 }
 
-fn build_line(
-    payload: &SessionStartPayload,
-    query: &str,
-    hits: usize,
-    additional_context: &str,
-) -> String {
+fn build_line(payload: &HookPayload, query: &str, hits: usize, additional_context: &str) -> String {
     let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let entry = serde_json::json!({
         "ts": ts,
@@ -58,12 +53,13 @@ fn write_line(log_path: &Path, line: &str) -> std::io::Result<()> {
     f.write_all(line.as_bytes())
 }
 
-/// Refuse the open if the audit log path is itself a symlink — a
-/// hostile `.stoa/audit.log -> /etc/passwd` (or a TOCTOU swap mid-
+/// Refuse the open if the audit log path is itself a symlink.
+///
+/// A hostile `.stoa/audit.log -> /etc/passwd` (or a TOCTOU swap mid-
 /// session) would otherwise let the hook append JSONL to an arbitrary
-/// file. We only inspect the file itself; parent-dir symlinks stay
-/// allowed because macOS roots every tmpdir at `/var/folders ->
-/// /private/var/folders` and tests would otherwise fail.
+/// file. Parent-dir symlinks stay allowed because macOS roots every
+/// tmpdir at `/var/folders -> /private/var/folders` and tests would
+/// otherwise fail.
 fn refuse_symlink(path: &Path) -> std::io::Result<()> {
     if let Ok(meta) = std::fs::symlink_metadata(path)
         && meta.file_type().is_symlink()

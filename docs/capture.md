@@ -1,121 +1,64 @@
 # Capture pipeline
 
-Capture is the path from "the agent finished a session" to "a redacted
-JSONL transcript is on disk under `sessions/`". The hot path runs in
-under 10 ms p95; everything else happens in workers.
+Capture in v0.1 is **delegated to MemPalace**. Stoa's contribution is the <10 ms Rust hook that fires the `mine` RPC; everything past that is MemPalace.
 
-## The 10 ms budget
+## The hook
 
-```
-Claude Code  ──fires Stop hook──►  stoa-hook binary
-                                        │
-                                        │  open .stoa/queue.db (WAL)
-                                        │  INSERT one row
-                                        │  exit 0
-                                        ▼
-                                  return control to agent
-```
+`stoa-hook` is the binary Claude Code invokes on `Stop` / `SessionEnd`. It:
 
-That is the entire hot path. `stoa-hook` does **not**:
+1. Reads the Claude Code hook payload on stdin (max 256 KiB).
+2. Extracts `transcript_path` from the JSON.
+3. Connects to `$XDG_RUNTIME_DIR/stoa-recalld.sock`.
+4. Sends `{"method":"mine","params":{"source_file":"<transcript_path>","session_id":"<id>"}}`.
+5. Closes the connection and exits 0.
 
-- run any redaction
-- write to `sessions/`
-- update any index
-- spawn any subprocess
+Cold-start budget: <10 ms p95. The hook uses `std::os::unix::net::UnixStream` (no async runtime), bounds stdin to 256 KiB, and does best-effort error handling — if the daemon is missing or the socket is unreachable, the hook still exits 0 so a down daemon never breaks the agent loop.
 
-It is a single static binary that opens a SQLite database in WAL mode
-(`synchronous=NORMAL`), inserts one row, and exits. The latency budget
-exists because anything heavier means the agent UI feels stuck on
-session end. An opt-in latency test in
-`crates/stoa-hooks/tests/latency.rs` (run with `STOA_LATENCY_GATE=1`)
-asserts the cold-start path stays under 15 ms; the strict <10 ms
-hyperfine gate ships in M6 alongside the v0.1 tag.
+## What MemPalace does with the transcript
 
-## The queue
+The `mine` RPC routes to MemPalace's `miner.mine_file(source_file=…, palace_path=…)`. MemPalace:
 
-The queue is `.stoa/queue.db` — a SQLite database with WAL +
-`synchronous=NORMAL`. WAL gives concurrent reader / single writer
-without blocking; `synchronous=NORMAL` trades the tail of fsync calls
-for the durability guarantee we need (no committed row is ever lost
-across a crash). Each queued row carries:
+- Splits the transcript into drawers (~paragraph-sized verbatim chunks).
+- Computes embeddings with its default sentence-transformer model (CPU, ~300 MB on disk).
+- Stores drawers in ChromaDB with cosine distance.
+- Adds BM25 sparse representations to its SQLite FTS5 index.
+- Indexes any entities it detects into the knowledge graph (separate SQLite db).
 
-- the agent + session id
-- the path to the transcript file (Claude Code writes its own jsonl
-  alongside the session).
-
-The queue itself hands workers a claim lease when they `claim()` —
-if a worker crashes mid-processing, the lease expires and the row
-returns to the pool unprocessed instead of lost.
-
-## The capture worker
-
-The worker runs inside `stoa daemon`. It loops:
-
-1. Claim the next unprocessed row (atomic update with a lease).
-2. Read the transcript file referenced by the row.
-3. Run PII redaction (see below).
-4. Append the redacted JSONL to `sessions/<session-id>.jsonl`.
-5. Append a `stoa.capture` event to `.stoa/audit.log`.
-6. Mark the queue row done.
-
-Crash recovery is automatic — a claim lease that expires returns the
-row to the queue and the next worker picks it up. The result is
-**always-flush**: any session that fires its `Stop` hook ends up on
-disk, regardless of session length, network state, or whether the
-daemon was running at the moment of capture.
+The drawer metadata carries `source_file`, `chunk_index`, `wing` (project), `room` (aspect). Stoa does not override these; MemPalace's miner sets them.
 
 ## PII redaction
 
-The redactor runs a fixed set of regex patterns in `crates/stoa-capture`:
+MemPalace exposes a `sanitize_query` helper for query-side defense and a configurable mining pipeline. In v0.1 Stoa does NOT layer additional redaction on top of MemPalace's defaults; that's tracked as a v0.1.x follow-up (the previous Rust `stoa-capture` regex pipeline was deleted in the pivot — see [docs/adr/0001-mempalace-pivot.md](adr/0001-mempalace-pivot.md)).
 
-- AWS access keys
-- Stripe live + test keys
-- OpenAI keys
-- Anthropic keys
-- GitHub Personal Access Tokens (classic + fine-grained)
-- `Bearer` tokens
-- JWTs
-- Email addresses
-- SSH / AWS / GPG path patterns (`~/.ssh/id_*`, `~/.aws/credentials`,
-  etc.)
+If your sessions contain secrets your workflow needs scrubbed BEFORE they hit MemPalace, run a pre-mine filter on the transcript yourself, point `stoa-hook` at the filtered copy via a wrapper script, or use Claude Code's built-in transcript redaction features.
 
-Matched substrings are replaced with placeholders like `[REDACTED:aws]`
-or `[REDACTED:stripe]`. The patterns are intentionally fixed for v0.1 —
-runtime-configurable patterns ship in v0.2.
+## What gets indexed
 
-!!! warning "Pre-redaction transcripts"
-    The transcript file the agent writes is pre-redaction. Only the
-    JSONL under `sessions/` has the redactor applied. Never paste a raw
-    Claude Code transcript into an issue without checking it manually.
+| What | Where |
+|---|---|
+| Verbatim conversation drawers | MemPalace palace (`.stoa/palace/`) |
+| Wiki pages tagged `kind=wiki` | Same palace, different metadata |
+| Raw URLs, PDFs, etc. you ingest | Drop them under `raw/`, run `mempalace mine raw/` directly |
 
-## Install
+The wiki and the drawer corpus share **one retrieval index** — Stoa filters by `kind=wiki` when the agent wants curated context, falls through to drawers when wiki coverage is thin.
+
+## Audit
+
+Capture does not append to `.stoa/audit.log` — only injection does. To inspect what MemPalace stored, use:
 
 ```bash
-stoa hook install --platform claude-code
+stoa query "<some text from your last session>" --include-drawers
+mempalace search "<text>"     # MemPalace's CLI, equivalent surface
 ```
 
-This **prints** a JSON snippet for Claude Code's settings.json. v0.1
-deliberately does not mutate your config — paste the printed snippet
-into `~/.config/claude-code/settings.json` (or your platform's
-equivalent) manually. The snippet references `stoa-hook` by bare name,
-so make sure `stoa-hook` is on your `PATH`.
+## Failure modes
 
-To remove the hook later, delete the matching entries from the same
-settings file you pasted into.
-
-## Audit trail
-
-Every capture event is appended to `.stoa/audit.log` as a single JSON
-line:
-
-```json
-{"ts":"2026-05-13T01:12:34Z","event":"transcript.captured","session_id":"01JC...","bytes":4821}
-```
-
-The log is append-only; the daemon never rewrites prior entries.
+- **Daemon down.** `stoa-hook` exits 0, the session is NOT indexed, no audit row is written. Restart with `stoa daemon start`.
+- **MemPalace not installed.** The daemon will fail health check at startup; restart the daemon after `uv tool install mempalace`.
+- **Transcript path missing.** `stoa-hook` exits 0 silently (no transcript = nothing to mine).
+- **Oversize stdin.** Stdin is bounded to 256 KiB; oversize payloads degrade to a default hook exit (no mine call).
 
 ## Next
 
-- [Recall](recall.md) — how captured sessions feed the index.
-- [SessionStart injection](injection.md) — the other side of the
-  agent-hook loop.
+- [Recall](recall.md) — how `stoa query` and the inject hook surface what MemPalace stored.
+- [Injection](injection.md) — how wiki hits land in front of the agent.

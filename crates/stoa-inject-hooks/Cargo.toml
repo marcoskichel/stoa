@@ -1,6 +1,6 @@
 [package]
 name = "stoa-inject-hooks"
-description = "Stoa SessionStart injection hook (recall-driven additionalContext)."
+description = "Stoa SessionStart + UserPromptSubmit injection hook — pulls wiki hits from stoa-recalld, wraps in MINJA-resistant envelope."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,18 +18,12 @@ path = "src/main.rs"
 
 [dependencies]
 stoa-recall = { path = "../stoa-recall", version = "0.1.0" }
-stoa-recall-local-chroma-sqlite = { path = "../stoa-recall/backends/local-chroma-sqlite", version = "0.1.0" }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
-
-[dev-dependencies]
-assert_fs = { workspace = true }
-snapbox = { workspace = true }
-serde_json = { workspace = true }
-stoa-cli = { path = "../stoa-cli", version = "0.1.0" }
 
 [lints]
 workspace = true

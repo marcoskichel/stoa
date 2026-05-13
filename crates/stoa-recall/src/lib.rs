@@ -1,18 +1,22 @@
-//! Stoa `RecallBackend` trait + reciprocal rank fusion.
+//! Stoa recall — backend trait + `MemPalace` adapter.
 //!
-//! Spec source: [ARCHITECTURE.md §6.1] (`RecallBackend` interface).
+//! Stoa's only retrieval backend is the long-lived Python daemon
+//! [`stoa-recalld`] which hosts `MemPalace` in-process. This crate is the
+//! Rust-side contract: a `RecallBackend` trait, a `Hit` value type that
+//! mirrors what the daemon emits, and a `MempalaceBackend` that talks to
+//! the daemon over a Unix domain socket using newline-delimited JSON.
 //!
-//! This crate is the substrate-free contract layer. Concrete backends live
-//! in sibling crates (`stoa-recall-local-chroma-sqlite` is the v0.1
-//! default). Anything that talks to a `SQLite` or vector store belongs
-//! there, not here.
+//! Spec: ARCHITECTURE.md §Overview (post-pivot, 2026-05-13).
 
-mod fusion;
-mod hit;
-mod stream;
-mod traits;
+pub mod hit;
+pub mod mempalace;
+pub mod traits;
+pub mod wire;
 
-pub use fusion::{RRF_K, rrf_fuse};
 pub use hit::{DocId, Hit, Metadata, SourcePath};
-pub use stream::{Stream, StreamSet};
+pub use mempalace::{MempalaceBackend, default_socket_path};
 pub use traits::{Filters, RecallBackend, RecallError, RecallResult};
+pub use wire::{
+    HealthResponse, MineRequest, MineResponse, ReadWikiRequest, ReadWikiResponse, SearchRequest,
+    SearchResponse, WriteWikiRequest, WriteWikiResponse,
+};

@@ -1,14 +1,26 @@
 [project]
 name = "stoa-harvest"
 version = "0.1.0"
-description = "Stoa Python sidecar: transcript harvest (instructor + anthropic)."
+description = "Stoa harvest worker: distills MemPalace drawers into the LLM wiki."
 requires-python = ">=3.13"
 license = "MIT"
-dependencies = ["stoa-shared"]
+dependencies = [
+    "anthropic>=0.40",
+    "pydantic>=2.9",
+]
+
+[project.scripts]
+stoa-harvest = "stoa_harvest.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/stoa_harvest"]
+
+[tool.basedpyright]
+include = ["src/stoa_harvest", "tests"]
+exclude = ["**/__pycache__", "build", "dist"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"

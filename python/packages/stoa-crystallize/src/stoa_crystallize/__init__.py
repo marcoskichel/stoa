@@ -1,8 +1,5 @@
-"""Stoa knowledge crystallization worker.
-
-M1 skeleton — concrete API lands in later milestones.
-"""
+"""Stoa crystallize worker: produces synthesis pages from existing wiki pages."""
 
 from __future__ import annotations
 
-VERSION: str = "0.1.0"
+__version__ = "0.1.0"

@@ -21,17 +21,6 @@ test:
     cargo test --workspace --locked
     cd python && uv run pytest -q
 
-# End-to-end tests — quality gate for user-facing CLI behavior.
-# Builds the `stoa` binary then runs trycmd + integration tests.
-e2e:
-    cargo test -p stoa-cli --test '*' --locked
-    cargo test -p stoa-core --test '*' --locked
-
-# Snapshot review / regen for trycmd golden files.
-# Use after intentional output changes; review diff carefully.
-e2e-review:
-    TRYCMD=overwrite cargo test -p stoa-cli --test cli_cmd --locked
-
 # --------------------------------------------------------------------------
 # Lint / format
 # --------------------------------------------------------------------------
@@ -43,7 +32,6 @@ lint:
     cd python && uv run ruff format --check .
 
 # Flag doc comments that restate the identifier.
-# Self-built tool — see crates/stoa-doclint.
 lint-docs:
     cargo run --quiet --locked -p stoa-doclint -- crates
 
@@ -59,15 +47,12 @@ typecheck:
 # Requires: `bacon` + `watchexec` (cargo install bacon watchexec-cli)
 # --------------------------------------------------------------------------
 
-# Interactive Rust dev loop (clippy on save).
 dev:
     bacon clippy
 
-# Cross-language watcher: re-run lint + test on any .rs/.py/.toml change.
 watch:
     watchexec --exts rs,py,toml --no-vcs-ignore --restart -- just lint test
 
-# Python-only test watcher.
 watch-py:
     cd python && uv run pytest -q --looponfail
 
@@ -80,14 +65,12 @@ file-length:
     ./scripts/check_lengths.py
 
 # CHANGELOG + issue/PR-template invariants — every shipped milestone
-# (M0..Mn) must be referenced; community on-ramp files must exist.
+# must appear; community on-ramp files must exist.
 check-changelog:
     ./scripts/check-changelog.sh
 
 # Docs site: build with --strict so broken links or undefined nav
-# entries fail the build. Uses the `docs` uv group; mkdocs.yml lives
-# at the repo root, content under docs/. Output lands in
-# `target/docs-site` (set in mkdocs.yml, gitignored).
+# entries fail the build. Output lands in `target/docs-site` (gitignored).
 docs:
     cd python && uv run --group docs mkdocs build --strict \
         --config-file ../mkdocs.yml
@@ -104,50 +87,38 @@ machete:
     cargo machete --with-metadata
 
 # --------------------------------------------------------------------------
-# Benchmarks
+# Daemon (development convenience)
 # --------------------------------------------------------------------------
 
-# Full v0.1 suite — requires M4 (LocalChromaSqliteBackend) to produce results.
-bench:
-    cargo run -p stoa-bench --release -- --backend local-chroma-sqlite
+# Start the recall daemon under the Python workspace. Honors STOA_RECALLD_SOCKET.
+daemon-start:
+    cd python && uv run --package stoa-recalld stoa-recalld --foreground &
 
-# Smoke run: validates fixtures exist and parse; does NOT require a live backend.
-bench-smoke:
-    cargo run -p stoa-bench --release -- --backend local-chroma-sqlite --smoke
+# Stop the recall daemon (sends SIGTERM via the pidfile if present).
+daemon-stop:
+    cargo run --quiet -p stoa-cli -- daemon stop || true
 
-# Download all v0.1 benchmark corpora into benchmarks/corpus/.
-# Requires: huggingface-cli + gdown (pip install huggingface_hub[cli] gdown)
-# MEMTRACK uses Google Drive (no HF dataset); BEAM 10M is a separate dataset.
-bench-download-corpus:
-    bash benchmarks/corpus/longmemeval.sh
-    bash benchmarks/corpus/memory-agent-bench.sh
-    bash benchmarks/corpus/memtrack.sh
-    bash benchmarks/corpus/beam.sh 1m
-    bash benchmarks/corpus/agent-leak.sh
-    bash benchmarks/corpus/mteb-retrieval.sh
-
-# Run a single benchmark by name (e.g. just bench-run longmemeval).
-bench-run name:
-    cargo run -p stoa-bench --release -- --backend local-chroma-sqlite --bench {{name}}
+# Health-probe the daemon.
+daemon-status:
+    cargo run --quiet -p stoa-cli -- daemon status
 
 # --------------------------------------------------------------------------
 # Install for local dev
 # --------------------------------------------------------------------------
 
 # Full dev environment bootstrap (idempotent).
-# Installs dev tools + builds workspaces. Requires rustup + uv on PATH.
 install:
     ./scripts/bootstrap.sh
 
-# Install stoa CLI to ~/.cargo/bin + sync Python sidecar. Assumes dev tools
-# already present (run `just install` first on a fresh clone).
+# Install Stoa's binaries + sync Python sidecar. Assumes dev tools present.
 install-dev:
     cargo install --path crates/stoa-cli --locked
+    cargo install --path crates/stoa-hooks --locked
+    cargo install --path crates/stoa-inject-hooks --locked
     cd python && uv sync --all-groups
 
 # --------------------------------------------------------------------------
 # Release: native or cross, tarballs into dist/.
-# Per M0 spike: linux/windows native cross or runner matrix; macOS via runner.
 # --------------------------------------------------------------------------
 
 release target:
@@ -178,15 +149,6 @@ release target:
         "stoa${ext}" "stoa-hook${ext}" "stoa-inject-hook${ext}"
     ls -lh "dist/stoa-${triple}.tar.gz"
 
-# Verify a release tarball contains every binary the install docs
-# promise (`stoa`, `stoa-hook`, `stoa-inject-hook`) — the gate that
-# protects v0.1 release tarballs from quietly dropping a binary.
-# Builds the tarball via `just release <target>` and then inspects
-# its contents.
-#
-# NOTE: not yet wired into `.github/workflows/release.yml` — release
-# authors must run this locally before tagging v0.X.Y. Workflow
-# integration is a deferred follow-up.
 release-verify target:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -224,13 +186,11 @@ release-verify target:
 ci-rust: lint lint-docs file-length check-changelog
     cargo build --workspace --locked
     cargo test --workspace --locked
-    just e2e
 
 ci-python: docs
     cd python && uv sync --all-groups --locked
     cd python && uv run ruff check .
     cd python && uv run ruff format --check .
-    cd python && uv run basedpyright
     ./scripts/check_lengths.py
     cd python && uv run pytest -q
 

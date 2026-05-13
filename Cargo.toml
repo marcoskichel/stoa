@@ -5,19 +5,8 @@ members = [
     "crates/stoa-cli",
     "crates/stoa-hooks",
     "crates/stoa-inject-hooks",
-    "crates/stoa-queue",
-    "crates/stoa-capture",
     "crates/stoa-recall",
-    "crates/stoa-recall/backends/local-chroma-sqlite",
-    "crates/stoa-viz",
-    "crates/stoa-render-mermaid",
-    "crates/stoa-render-svg",
-    "crates/stoa-render-tui",
-    "crates/stoa-bench",
     "crates/stoa-doclint",
-]
-exclude = [
-    "benchmarks/spike-m0",
 ]
 
 [workspace.package]
@@ -30,51 +19,24 @@ authors = ["Stoa Contributors"]
 homepage = "https://github.com/marcoskichel/stoa"
 
 [workspace.dependencies]
-# CLI / runtime
 clap = { version = "4", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "net", "io-util", "time", "sync"] }
 
-# Storage
-rusqlite = { version = "0.39", features = ["bundled", "chrono", "serde_json", "uuid"] }
-
-# Serde
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
 
-# Errors / logging
 anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
 
-# HTTP (rustls only — see deny.toml ban on native-tls)
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-
-# Render / viz
-ratatui = "0.29"
-resvg = "0.45"
-
-# Time
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 
-# Async runtime extensions (cancellation tokens, task tracker)
-tokio-util = { version = "0.7", features = ["rt"] }
-
-# Pattern matching (PII redaction + queue claim — M3)
 regex = "1"
-aho-corasick = "1"
-fancy-regex = "0.13"
 uuid = { version = "1", features = ["v4"] }
 
-# Async + filesystem watch (M4 recall daemon watcher)
 async-trait = "0.1"
-notify = { version = "8", default-features = false, features = ["macos_kqueue"] }
-notify-debouncer-full = { version = "0.6", default-features = false }
 
-# Compression — gzipped BEIR jsonl support in stoa-bench MTEB adapter
-flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-
-# Test stack (dev-only) — see research note in CONTRIBUTING.md
 snapbox = "1.2"
 trycmd = "1.2"
 assert_fs = "1"
@@ -92,13 +54,6 @@ opt-level = 3
 [profile.dev]
 opt-level = 0
 debug = true
-
-# ---------------------------------------------------------------------------
-# Workspace lints (see clippy.toml for thresholds, deny.toml for supply chain).
-# Inherit in every member: `[lints]\nworkspace = true`.
-# Escape hatch: use `#[expect(<lint>, reason = "...")]`, never `#[allow]`.
-# Note: groups carry `priority = -1` so explicit per-lint settings win.
-# ---------------------------------------------------------------------------
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -120,12 +75,10 @@ future_incompatible = { level = "warn", priority = -1 }
 nonstandard_style = { level = "warn", priority = -1 }
 
 [workspace.lints.clippy]
-# Groups
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 
-# Pedantic downgrades — too noisy without losing real value
 module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
@@ -134,11 +87,9 @@ too_many_lines = "warn"
 similar_names = "allow"
 struct_excessive_bools = "allow"
 
-# Cargo group quiet-down for pre-1.0 (re-enable before publish)
 multiple_crate_versions = "allow"
 cargo_common_metadata = "allow"
 
-# Restriction — handpicked
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
@@ -164,7 +115,6 @@ clone_on_ref_ptr = "warn"
 self_named_module_files = "deny"
 verbose_file_reads = "warn"
 
-# Cherry-picked nursery (async / drop correctness)
 await_holding_lock = "deny"
 await_holding_invalid_type = "deny"
 large_futures = "warn"

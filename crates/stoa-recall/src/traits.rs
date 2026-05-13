@@ -1,28 +1,25 @@
 //! `RecallBackend` trait + filters + error type.
 //!
-//! Async + `Send + Sync + 'static` so backends can be wrapped in
-//! `Arc<dyn RecallBackend<Error = ...>>` and shared across worker tasks.
-//! Trait methods are `&self` because backends own their own interior
-//! mutability (`Mutex<Connection>`, IPC client pool, etc.).
+//! Mempalace is the sole impl shipped with Stoa, but the trait stays
+//! pluggable. Implementors are expected to be `Send + Sync + 'static`
+//! and own their interior mutability (connection pool, socket etc.).
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::hit::Hit;
-use crate::stream::StreamSet;
 
-/// Convenience `Result` alias keyed off the trait's associated `Error`.
-pub type RecallResult<T, E> = Result<T, E>;
+/// Result alias keyed off `RecallError`.
+pub type RecallResult<T> = Result<T, RecallError>;
 
-/// Filters applied to a `search` call (kind, type, time window, etc.).
+/// Inclusive equality filters passed through to the backend.
 ///
-/// A free-form `BTreeMap<String, String>` so backends can interpret keys
-/// they understand and silently ignore the rest. Wire-compatible with the
-/// JSON shape the Python sidecar emits.
+/// `MemPalace` understands `wing`, `room`, and any metadata key the daemon
+/// stores on drawer writes (e.g. `kind=wiki` for the wiki-as-drawer
+/// pattern). Unknown keys are silently ignored by the backend.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Filters {
     /// Inclusive equality filters. Empty map = no filtering.
@@ -38,36 +35,41 @@ impl Filters {
         let _previous = eq.insert(key.to_owned(), value.to_owned());
         Self { eq }
     }
+
+    /// Wiki-only filter: `kind = "wiki"`.
+    #[must_use]
+    pub fn wiki_only() -> Self {
+        Self::one("kind", "wiki")
+    }
 }
 
-/// Errors any [`RecallBackend`] may surface.
+/// Errors surfaced by any [`RecallBackend`].
 #[derive(Debug, Error)]
 pub enum RecallError {
-    /// Backend is unhealthy (Python sidecar down, queue unreachable).
+    /// Backend unreachable (daemon down, socket missing).
     #[error("backend unavailable: {0}")]
     Unavailable(String),
 
-    /// Caller passed an invalid argument (empty stream set, bad path, ...).
+    /// Caller passed an invalid argument.
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
 
-    /// Underlying I/O failure (queue, FTS5, `ChromaDB`).
+    /// Underlying I/O failure.
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 
-    /// JSON serialization failure (request/response payloads).
+    /// JSON encode/decode failure on the wire.
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
 
-    /// Backend storage failure (`SQLite`, vector store, ...).
-    ///
-    /// Carried as a flat string so the trait stays substrate-free
-    /// (no `rusqlite` in `stoa-recall`'s public surface), but typed
-    /// distinctly from `Other` so callers can pattern-match on
-    /// "this is a storage problem" vs. "this is a generic backend
-    /// error".
-    #[error("sqlite: {0}")]
-    Sqlite(String),
+    /// Daemon returned a typed error response.
+    #[error("daemon error [{code}]: {message}")]
+    Daemon {
+        /// Symbolic code emitted by the daemon (e.g. `not_found`, `palace_missing`).
+        code: String,
+        /// Human-readable message.
+        message: String,
+    },
 
     /// Backend exceeded the per-call deadline.
     #[error("deadline exceeded after {millis}ms")]
@@ -75,74 +77,35 @@ pub enum RecallError {
         /// How long the call ran before timing out.
         millis: u64,
     },
-
-    /// Catch-all for backend-specific failures with a descriptive message.
-    #[error("backend error: {0}")]
-    Other(String),
-
-    /// The backend has not implemented this method yet (stub).
-    ///
-    /// Used by methods like `graph_neighbors` and `quality_suite` that
-    /// land in M5+; backends MAY return this immediately so callers
-    /// can probe the surface area without implementing every leaf.
-    #[error("not yet implemented: {0}")]
-    Unimplemented(&'static str),
 }
 
-/// The contract every recall backend implements.
-///
-/// `index_page` / `index_session` are write paths — they update both the
-/// vector store + BM25 index in one logical step. `search` is the read
-/// path; it MUST honor the [`StreamSet`] (e.g. BM25-only must skip vector
-/// store calls so the backend can answer without the embedding model).
+/// The contract for any retrieval substrate Stoa can drive.
 #[async_trait]
 pub trait RecallBackend: Send + Sync + 'static {
-    /// Index (or re-index) a single wiki page.
+    /// Semantic + BM25 hybrid search.
     ///
-    /// Idempotent on `page_id`: re-indexing replaces the prior entry.
-    async fn index_page(
+    /// Returns up to `top_k` hits sorted by score descending. Empty list
+    /// is a valid response (no hits is not an error).
+    async fn search(&self, query: &str, top_k: usize, filters: &Filters) -> RecallResult<Vec<Hit>>;
+
+    /// Index a transcript file or arbitrary text into the backend.
+    ///
+    /// Fire-and-forget from the caller's POV; the backend MAY return
+    /// immediately after queueing the write.
+    async fn mine(&self, source_file: &str) -> RecallResult<Vec<String>>;
+
+    /// Write (or overwrite) a wiki page in both backend index and
+    /// canonical on-disk markdown. Idempotent on `page_id`.
+    async fn write_wiki(
         &self,
         page_id: &str,
-        content: &str,
-        source_path: &str,
-        metadata: &serde_json::Value,
-    ) -> Result<(), RecallError>;
+        frontmatter: &serde_json::Value,
+        body: &str,
+    ) -> RecallResult<String>;
 
-    /// Index (or re-index) a session JSONL file. Each line is one turn.
-    async fn index_session(&self, session_id: &str, jsonl_path: &Path) -> Result<(), RecallError>;
+    /// Read a wiki page back from the canonical on-disk store.
+    async fn read_wiki(&self, page_id: &str) -> RecallResult<(serde_json::Value, String)>;
 
-    /// Drop a doc from every stream. Idempotent.
-    async fn remove(&self, doc_id: &str) -> Result<(), RecallError>;
-
-    /// Hybrid search across the requested streams.
-    ///
-    /// Empty results are NOT an error — return an empty `Vec`.
-    async fn search(
-        &self,
-        query: &str,
-        k: usize,
-        filters: &Filters,
-        streams: StreamSet,
-    ) -> Result<Vec<Hit>, RecallError>;
-
-    /// Liveness check. Returns shape-free JSON the caller can log; the
-    /// trait only requires that the call succeed in <500 ms when healthy.
-    async fn health_check(&self) -> Result<serde_json::Value, RecallError>;
-
-    /// Return up to `k` doc ids reachable from `doc_id` along KG edges.
-    ///
-    /// Default impl returns [`RecallError::Unimplemented`] — the M4
-    /// backends ship without graph traversal; M5 wires it via the KG
-    /// tables. Implementing this is opt-in per backend.
-    async fn graph_neighbors(&self, _doc_id: &str, _k: usize) -> Result<Vec<String>, RecallError> {
-        Err(RecallError::Unimplemented("RecallBackend::graph_neighbors"))
-    }
-
-    /// Run the canonical recall quality suite (`LongMemEval` subset for M5).
-    ///
-    /// Default impl returns [`RecallError::Unimplemented`]. Backends opt
-    /// in once they want to participate in `stoa-bench` rotations.
-    async fn quality_suite(&self) -> Result<serde_json::Value, RecallError> {
-        Err(RecallError::Unimplemented("RecallBackend::quality_suite"))
-    }
+    /// Liveness check. MUST complete in <500ms on a healthy backend.
+    async fn health(&self) -> RecallResult<serde_json::Value>;
 }

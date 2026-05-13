@@ -1,14 +1,26 @@
 [project]
 name = "stoa-crystallize"
 version = "0.1.0"
-description = "Stoa Python sidecar: knowledge crystallization (instructor + anthropic)."
+description = "Stoa crystallize worker: produces synthesis pages from entity/concept wiki pages."
 requires-python = ">=3.13"
 license = "MIT"
-dependencies = ["stoa-shared"]
+dependencies = [
+    "stoa-harvest",
+    "anthropic>=0.40",
+]
+
+[project.scripts]
+stoa-crystallize = "stoa_crystallize.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/stoa_crystallize"]
+
+[tool.basedpyright]
+include = ["src/stoa_crystallize", "tests"]
+exclude = ["**/__pycache__", "build", "dist"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"

@@ -2,65 +2,24 @@
 #
 # Spec: https://release-plz.dev/docs/config
 #
-# How releases work after this lands:
-#
-# 1. Push a Conventional-Commits commit to `main`.
-# 2. The `release-plz.yml` workflow opens (or updates) a release PR
-#    bumping every workspace crate's version + appending the new
-#    changelog entries under `## [Unreleased]` in `CHANGELOG.md`.
-# 3. Review the diff. Edit prose / changelog wording in-place on the PR
-#    if you want — release-plz only rewrites what it generated.
-# 4. Merge. Release-plz cuts a git tag per published crate, publishes
-#    each to crates.io, and creates a matching GitHub Release. The
-#    existing `release.yml` workflow then fires on the tag and builds
-#    the cross-platform tarballs.
+# Flow after the pivot:
+#   1. Push a Conventional-Commits commit to `main`.
+#   2. `release-plz.yml` opens (or updates) a release PR bumping every
+#      workspace crate's version + appending changelog entries.
+#   3. Merge. Release-plz tags `vX.Y.Z`, publishes each `publish = true`
+#      crate to crates.io, and opens a GitHub Release. `release.yml`
+#      then builds the cross-platform tarballs.
 
 [workspace]
-# v0.1: every crate ships at the same workspace-pinned version
-# (`workspace.package.version` in Cargo.toml). When a crate gains an
-# independent versioning lifecycle in v0.2+, configure `version_group`
-# per-package instead.
 allow_dirty = false
 changelog_update = true
 git_release_enable = true
 pr_labels = ["release", "automated"]
 publish = true
-
-# Run `cargo-semver-checks` on every PR so accidental breaking changes
-# show up in the diff before they ship to crates.io. Pre-1.0 we have
-# more leeway, but the gate is cheap to keep on.
 semver_check = true
 
-# Internal-only crates: bump version + changelog so the workspace stays
-# in lockstep, but skip both `cargo publish` (no public consumers) and
-# the per-crate GitHub Release (would just be noise on the releases
-# page). Re-enable when these crates gain published callers.
-[[package]]
-name = "stoa-bench"
-publish = false
-git_release_enable = false
-
+# Internal-only crate: bump in lockstep, skip publish + release noise.
 [[package]]
 name = "stoa-doclint"
-publish = false
-git_release_enable = false
-
-[[package]]
-name = "stoa-render-mermaid"
-publish = false
-git_release_enable = false
-
-[[package]]
-name = "stoa-render-svg"
-publish = false
-git_release_enable = false
-
-[[package]]
-name = "stoa-render-tui"
-publish = false
-git_release_enable = false
-
-[[package]]
-name = "stoa-viz"
 publish = false
 git_release_enable = false

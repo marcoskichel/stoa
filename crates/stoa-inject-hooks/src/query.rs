@@ -1,64 +1,56 @@
-//! Build a recall query from recent activity.
+//! Build a recall query from session and prompt signals.
 //!
-//! Combines three signals (per ROADMAP M5): the current directory's
-//! basename, the git remote URL (if any), and the stems + H1 titles of
-//! the most recently modified wiki pages in the last 24h. Empty
-//! workspaces produce an empty query so the BM25 search returns no
-//! hits and the relevance gate fires.
-//!
-//! Token decomposition: wiki stems are stripped of the `ent-`/`con-`/
-//! `syn-` page-kind prefix and the rest is split on `-` so an entity
-//! like `ent-redis-cache` contributes the searchable tokens
-//! `redis cache`. Hidden directory basenames (those starting with `.`,
-//! e.g. tempdirs) are dropped — they would only narrow an AND-default
-//! BM25 match without contributing a real signal.
+//! For `UserPromptSubmit`, the user's prompt text is the primary query;
+//! workspace signals are folded in only when the prompt is empty. For
+//! `SessionStart`, fall back to the cwd basename + git remote + most
+//! recently edited wiki pages — the original M5 ladder.
 
 use std::cmp::Reverse;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use crate::payload::HookEvent;
 use crate::workspace::InjectWorkspace;
 
-/// How many recently-modified wiki pages to fold into the query.
 const MAX_RECENT_WIKI_PAGES: usize = 8;
-
-/// Recency window for "recently edited" wiki pages.
 const RECENT_WINDOW: Duration = Duration::from_hours(24);
+const MAX_WIKI_CANDIDATES: usize = 256;
 
-/// Construct a fallback ladder of recall queries for `ws` given `cwd`.
+/// Construct an ordered list of queries to try against the daemon.
 ///
-/// BM25 default is AND, so a single concatenated query that includes
-/// every signal (cwd basename + git remote + wiki stems + titles) is
-/// the most-specific match — it returns hits only when all tokens
-/// co-occur in some doc. The ladder degrades from "all signals" to
-/// "wiki stems + titles" to "wiki titles only" to "first wiki stem
-/// token only", trying each in order until one returns hits. An
-/// empty workspace produces an empty ladder so the relevance gate
-/// fires on the very first try.
-///
-/// Callers should iterate the returned `Vec` and stop on the first
-/// non-empty hit set; the *successful* query is what gets audited.
-pub(crate) fn build_query_ladder(ws: &InjectWorkspace, cwd: Option<&Path>) -> Vec<String> {
+/// The caller iterates this in order, stopping on the first non-empty
+/// result. For `UserPromptSubmit` the prompt text alone usually wins;
+/// the workspace signals are appended as a fallback ladder when the
+/// prompt is empty (a degenerate `/clear`-style submission).
+pub(crate) fn build_query_ladder(
+    ws: &InjectWorkspace,
+    cwd: Option<&Path>,
+    event: HookEvent,
+    prompt: Option<&str>,
+) -> Vec<String> {
     let cwd_token = cwd_basename_token(cwd);
     let remote = git_remote_url(cwd, &ws.root);
     let recents = recent_wiki_entries(&ws.wiki());
     let stem_toks: Vec<String> = recents.iter().flat_map(|e| stem_tokens(&e.stem)).collect();
     let titles: Vec<String> = recents.iter().filter_map(|e| e.title.clone()).collect();
-    candidate_queries(cwd_token.as_deref(), remote.as_deref(), &stem_toks, &titles)
-}
 
-fn candidate_queries(
-    cwd_token: Option<&str>,
-    remote: Option<&str>,
-    stem_tokens: &[String],
-    titles: &[String],
-) -> Vec<String> {
     let mut ladder: Vec<String> = Vec::new();
-    push_join(&mut ladder, &full_signal(cwd_token, remote, stem_tokens, titles));
-    push_join(&mut ladder, &joined(stem_tokens, titles));
-    push_join(&mut ladder, titles);
-    if let Some(first) = stem_tokens.first() {
+
+    if event == HookEvent::UserPromptSubmit
+        && let Some(p) = prompt
+        && !p.trim().is_empty()
+    {
+        push_join(&mut ladder, &[p.to_owned()]);
+    }
+
+    push_join(
+        &mut ladder,
+        &full_signal(cwd_token.as_deref(), remote.as_deref(), &stem_toks, &titles),
+    );
+    push_join(&mut ladder, &joined(&stem_toks, &titles));
+    push_join(&mut ladder, &titles);
+    if let Some(first) = stem_toks.first() {
         push_join(&mut ladder, std::slice::from_ref(first));
     }
     dedup_preserving_order(ladder)
@@ -103,9 +95,6 @@ fn dedup_preserving_order(items: Vec<String>) -> Vec<String> {
     out
 }
 
-/// Return the basename as a single-element iterator, dropping dotfile
-/// names like a tempdir's `.tmpXXX` that would only narrow the AND
-/// match without contributing semantic signal.
 fn cwd_basename_token(cwd: Option<&Path>) -> Option<String> {
     let name = cwd?.file_name()?.to_str()?;
     if name.starts_with('.') {
@@ -114,9 +103,6 @@ fn cwd_basename_token(cwd: Option<&Path>) -> Option<String> {
     Some(name.to_owned())
 }
 
-/// Walk up from `start` (or `fallback`) for a `.git/config`, then
-/// extract the first `url = ...` value. Best-effort: any failure
-/// returns `None` so the caller skips the remote signal.
 fn git_remote_url(start: Option<&Path>, fallback: &Path) -> Option<String> {
     let origin = start.unwrap_or(fallback);
     let cfg = find_git_config(origin)?;
@@ -150,8 +136,6 @@ fn parse_git_url_line(line: &str) -> Option<String> {
     }
 }
 
-/// Decompose a wiki stem into searchable tokens by stripping the
-/// page-kind prefix and splitting the remainder on `-`.
 fn stem_tokens(stem: &str) -> Vec<String> {
     let body = strip_page_prefix(stem);
     body.split('-')
@@ -175,17 +159,10 @@ struct WikiEntry {
     title: Option<String>,
 }
 
-/// Up to N most-recently-modified `*.md` files under `wiki/` in the
-/// last 24h, with their H1 title parsed (if any).
 fn recent_wiki_entries(wiki_root: &Path) -> Vec<WikiEntry> {
     let raw = collect_recent_wiki(wiki_root);
     raw.into_iter().take(MAX_RECENT_WIKI_PAGES).collect()
 }
-
-/// Hard cap on candidate `*.md` files we collect *before* sorting by
-/// mtime. Bounds the worst-case walk on a wiki with thousands of pages
-/// so the hot path stays sub-millisecond on a cold FS cache.
-const MAX_WIKI_CANDIDATES: usize = 256;
 
 fn collect_recent_wiki(wiki_root: &Path) -> Vec<WikiEntry> {
     if !wiki_root.is_dir() {
@@ -265,9 +242,6 @@ fn try_record_md(path: &Path, accum: &mut Vec<(SystemTime, PathBuf, String)>, cu
     accum.push((mtime, path.to_path_buf(), stem.to_owned()));
 }
 
-/// Skip the workspace's scaffold pages (`index.md`, `log.md`,
-/// `lint-report.md`) — they describe the wiki itself, not entity
-/// content, and would only narrow the AND-default BM25 match.
 fn is_meta_page(stem: &str) -> bool {
     matches!(stem, "index" | "log" | "lint-report")
 }

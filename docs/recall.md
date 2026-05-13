@@ -1,116 +1,93 @@
 # Recall
 
-Recall is the retrieval layer: `stoa query` and the SessionStart hook
-both call into the same `RecallBackend` trait to find relevant content.
+All retrieval in Stoa goes through the `stoa-recalld` daemon's `search` RPC. The daemon delegates to MemPalace's `searcher.search_memories`, which runs a hybrid pipeline:
 
-## The trait
+1. **Cosine retrieval.** ChromaDB pulls the top `n_results * 3` drawers by HNSW cosine distance.
+2. **BM25 rerank.** Okapi-BM25 is computed over the candidate pool against the query and used to reorder the top results.
+3. **Optional union widen.** With `candidate_strategy="union"`, MemPalace pulls additional candidates from its SQLite FTS5 index and merges them into the rerank pool. Stoa does not enable this by default.
+4. **Closet boost.** MemPalace's "closet" entries (per-source topic summaries) contribute a rank-based boost to drawers in matching sources.
 
-The full signature lives in `crates/stoa-recall/src/traits.rs`. The
-conceptual surface is:
+Result: each hit carries `score` (cosine similarity, `max(0, 1 - distance)`), `snippet` (the matched chunk text, expanded with ±1 sibling chunks when available), `source_path`, and `metadata` (including `kind`, `wing`, `room`).
 
-- `index_page` — index one wiki page.
-- `index_session` — index one redacted session JSONL.
-- `search` — hybrid query with filters + a per-call stream selection;
-  returns ranked `Hit`s with `source_path`, `doc_id`, `score`, and
-  per-stream provenance.
-- `remove` — drop a doc from the index by id.
-- `health_check` + `graph_neighbors` + `quality_suite` — optional,
-  with default `Unimplemented` impls so a minimal backend can ignore
-  them.
+## Filters
 
-The trait is `async` and `Send + Sync + 'static` so backends can be
-shared across worker tasks behind `Arc<dyn RecallBackend>`.
+Stoa adds one metadata convention on top of MemPalace's `wing` / `room` namespacing:
 
-Every `Hit` carries a `source_path` that resolves to a real file on
-disk. That guarantee makes Stoa's output verifiable — the agent can
-quote by path and a human can open it.
+| Filter | Meaning |
+|---|---|
+| `kind=wiki` | Only curated wiki pages (default for `stoa query` and `stoa-inject-hook`). |
+| (no `kind` filter) | All drawers — verbatim conversation chunks + wiki pages. |
 
-## The default backend: `LocalChromaSqliteBackend`
-
-`LocalChromaSqliteBackend` is the v0.1 default. It runs three streams
-in parallel and fuses with **reciprocal rank fusion** (RRF, k=60):
-
-```
-              ┌─► BM25 (SQLite FTS5)   ─┐
-   query ─────┼─► Vector (ChromaDB)    ─┼─► RRF fusion ─► ranked hits
-              └─► Graph (typed KG)     ─┘
-```
-
-- **BM25** lives in `.stoa/recall.db` (SQLite FTS5 in the same file as
-  the queue, separate tables).
-- **Vector** uses ChromaDB embeddings (`bge-small-en-v1.5` by default).
-  Stored under `.stoa/vectors/`.
-- **Graph** is two SQLite tables (`nodes`, `edges`) holding the typed
-  knowledge graph derived from frontmatter `relationships`.
-
-RRF is unweighted by default — each stream contributes equally. Per-hit
-provenance carries which streams matched, so downstream consumers can
-re-weight if needed.
-
-## `stoa query`
+`stoa query "..."` defaults to `kind=wiki`; pass `--include-drawers` to drop the filter:
 
 ```bash
-stoa query "redis vs memcached"
-stoa query "redis vs memcached" --k 20
-stoa query "redis vs memcached" --streams bm25,vector --json
+stoa query "session token TTL"                  # wiki only
+stoa query "session token TTL" --include-drawers # wiki + drawers
 ```
 
-Flags:
+## Wiki-as-drawer
 
-- `--k <N>` — number of hits to return (default 10).
-- `--streams <a,b,c>` — restrict to a subset of the three streams.
-  Useful for debugging which stream surfaced a result.
-- `--json` — emit one JSON object per line for downstream tooling.
+`stoa write` writes the wiki page to disk AND inserts the same content as a drawer in the MemPalace palace with metadata:
 
-## Indexing
+```json
+{
+  "kind": "wiki",
+  "wiki_kind": "entity",
+  "wiki_id": "ent-redis",
+  "source_file": "wiki/entities/ent-redis.md",
+  "wing": "__stoa_wiki__",
+  "room": "entity",
+  "title": "Redis"
+}
+```
 
-Indexing happens two ways:
+The `wing=__stoa_wiki__` separates wiki pages from conversation drawers in MemPalace's wing-based view. The `kind=wiki` metadata is what `stoa query` and the inject hook filter on.
 
-1. **Live.** The daemon watches `wiki/` for changes (via
-   `notify-debouncer-full`, which wraps `notify`) and re-indexes any
-   page whose mtime changes. A separate recall-drain worker indexes
-   new session JSONL files after the capture worker writes them.
-2. **Rebuild.** `stoa index rebuild` tears down `.stoa/recall.db` and
-   `.stoa/vectors/` and rebuilds them from the source-of-truth files
-   under `wiki/`, `raw/`, and `sessions/`. This is the load-bearing
-   invariant: nothing lives only in the index.
+## CLI
 
-## Cold-start budget
+```bash
+stoa query "redis caching"                # top 5 wiki hits
+stoa query "redis caching" --top-k 10     # top 10 wiki hits
+stoa query "redis caching" --include-drawers   # also include conversation drawers
+```
 
-| Operation                              | Budget         |
-| -------------------------------------- | -------------- |
-| `stoa init --no-embeddings`            | <5s            |
-| `stoa init` (with embedding model dl)  | <60s           |
-| Single `stoa query` after warm-up      | <100ms p95     |
-| `stoa rebuild` over 1000-page wiki     | seconds-scale  |
+Output:
 
-`--no-embeddings` is the BM25-only mode for environments that cannot
-fetch the embedding model.
+```
+1. [score=0.870] wiki/entities/ent-redis.md
+   In-memory data store. Used for caching session tokens and rate limiting.
+2. [score=0.712] wiki/concepts/con-cache-keys.md
+   Cache key shape across services.
+...
+```
 
-## Benchmarks
+## The inject path
 
-Recall accuracy is measured against the v0.1 benchmark suite:
+`stoa-inject-hook` builds a query from:
 
-- **LongMemEval** — long-context dialog memory recall
-- **MemoryAgentBench** — multi-turn agent memory tasks
-- **MEMTRACK** — memory tracking + redundancy metrics
-- **BEAM** — embedding retrieval at scale
-- **AgentLeak** — adversarial info-leakage probes
+- **For `UserPromptSubmit`**: primarily the user's prompt text, with workspace signals (cwd basename, git remote, recently-edited wiki page stems + H1 titles) as a fallback ladder.
+- **For `SessionStart`**: workspace signals only (no prompt yet) — full signal joined first, then progressively narrower fallbacks down to "first wiki stem token alone".
 
-Numbers are published per-backend under
-`benchmarks/results/v0.1-<backend>-<benchmark>.md` — see
-[benchmarks/README.md](https://github.com/marcoskichel/stoa/blob/main/benchmarks/README.md).
+The first query in the ladder that produces non-empty hits wins. The hit set is wrapped in the MINJA-resistant envelope and emitted as `additionalContext`. See [injection.md](injection.md) for the envelope details.
 
-## Swappable backends
+## Score interpretation
 
-The `RecallBackend` trait is the seam for community adapters. Future
-backends (Qdrant, LanceDB, pure-Rust embedding stack) implement the
-same trait; nothing in the rest of Stoa depends on the concrete
-backend type.
+The `score` returned by the daemon is `max(0, 1 - cosine_distance)`. Practical ranges:
+
+| Score | Meaning |
+|---|---|
+| ≥ 0.85 | Very strong semantic match. |
+| 0.65 – 0.85 | Plausible match; usually keep. |
+| 0.45 – 0.65 | Weak match; useful only if the topic is sparse. |
+| < 0.45 | Probably noise. |
+
+The inject hook's relevance gate accepts any hit with `score > 0` — the top hit's score is what determines whether the envelope is emitted at all (no top hit above floor → empty injection).
+
+## Backends
+
+`stoa-recall` defines a `RecallBackend` trait. v0.1 ships only `MempalaceBackend` (Unix-socket client). The trait stays for the day a better substrate appears — backend swaps require zero changes to the hooks or CLI.
 
 ## Next
 
-- [SessionStart injection](injection.md) — how query results become
-  context.
-- [Troubleshooting](troubleshooting.md) — empty results, missing
-  embeddings, daemon-not-running symptoms.
+- [Injection](injection.md) — how the daemon's hits are wrapped and surfaced.
+- [Troubleshooting](troubleshooting.md) — empty results, daemon timeouts, etc.

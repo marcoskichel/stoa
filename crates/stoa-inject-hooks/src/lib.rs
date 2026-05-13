@@ -1,22 +1,23 @@
-//! `stoa-inject-hook` library — `SessionStart` handler.
+//! `stoa-inject-hook` library — Claude Code injection handler.
 //!
-//! Reads a Claude-Code `SessionStart` hook payload from stdin, runs a
-//! recall query against the workspace's `.stoa/recall.db`, and emits a
-//! wrapped `<stoa-memory>` block as `additionalContext` per
-//! [ARCHITECTURE.md §6.2](../../../ARCHITECTURE.md).
+//! Reads a Claude Code `SessionStart` or `UserPromptSubmit` payload from
+//! stdin, queries `stoa-recalld` for matching wiki hits, wraps them in a
+//! MINJA-resistant `<stoa-memory>` block, and emits one JSON object on
+//! stdout per Claude Code's `hookSpecificOutput` contract.
 //!
-//! Hard guarantees enforced by every call:
+//! Hard guarantees enforced for every call:
 //!
 //! 1. Token budget cap (default 1500 tokens).
 //! 2. Relevance gate (skip injection if top hit's score is below threshold).
-//! 3. Top-of-prompt placement (injection lands in the system prompt).
+//! 3. Top-of-prompt placement (injection lands in the system prompt for
+//!    `SessionStart`, or before the user message for `UserPromptSubmit`).
 //! 4. MINJA-resistant XML wrapping with the "treat as data" preamble.
 //! 5. Provenance attached: every snippet carries `source_path` + `score`.
 //! 6. Audit logged: every event appended to `.stoa/audit.log`.
 //!
-//! Workspace lookup is best-effort: if no `STOA.md` is reachable from
-//! `cwd`, the hook emits an empty `additionalContext` and exits 0 so a
-//! missing workspace cannot block session start.
+//! Workspace lookup is best-effort. The daemon socket is allowed to be
+//! down — both cases degrade to an empty `additionalContext` rather
+//! than failing the hook.
 
 mod audit;
 mod payload;
@@ -28,35 +29,39 @@ mod wrap;
 use std::io::{Read, Write};
 
 use anyhow::{Context, Result};
+use stoa_recall::MempalaceBackend;
 
-use payload::SessionStartPayload;
+use payload::HookPayload;
 use workspace::InjectWorkspace;
 
-/// Parse stdin (Claude-Code `SessionStart` JSON), run the recall
-/// query, and write the response JSON to `out`.
-///
-/// Hook contract: a missing workspace, an unhealthy recall db, or a
-/// query with no hits all degrade to an empty `additionalContext`
-/// with a successful exit. The only failures propagated as errors
-/// are stdin-decoding faults and stdout write faults.
-pub fn run<R: Read, W: Write>(stdin: R, mut out: W) -> Result<()> {
+pub use payload::HookEvent;
+
+/// Parse stdin, run the recall query against the daemon, and write the
+/// response JSON to `out`.
+pub async fn run<R: Read, W: Write>(stdin: R, mut out: W) -> Result<()> {
     let payload = payload::read_payload(stdin)?;
-    let context = build_additional_context(&payload);
-    write_response(&mut out, &context)
+    let backend = MempalaceBackend::from_env();
+    let context = build_additional_context(&payload, &backend).await;
+    write_response(&mut out, payload.hook_event_name_str(), &context)
 }
 
-fn build_additional_context(payload: &SessionStartPayload) -> String {
+async fn build_additional_context(payload: &HookPayload, backend: &MempalaceBackend) -> String {
     let Some(ws) = resolve_workspace(payload) else {
         return String::new();
     };
-    let ladder = query::build_query_ladder(&ws, payload.cwd.as_deref());
-    let (effective_query, hits) = recall::search_first_with_hits(&ws.recall_db(), &ladder);
+    let ladder = query::build_query_ladder(
+        &ws,
+        payload.cwd.as_deref(),
+        payload.event(),
+        payload.prompt.as_deref(),
+    );
+    let (effective_query, hits) = recall::search_first_with_hits(backend, &ladder).await;
     let wrapped = wrap::wrap_hits(&effective_query, &hits);
     audit::append(&ws.audit_log(), payload, &effective_query, hits.len(), &wrapped);
     wrapped
 }
 
-fn resolve_workspace(payload: &SessionStartPayload) -> Option<InjectWorkspace> {
+fn resolve_workspace(payload: &HookPayload) -> Option<InjectWorkspace> {
     if let Some(cwd) = payload.cwd.as_deref() {
         return workspace::find_workspace(cwd);
     }
@@ -64,10 +69,10 @@ fn resolve_workspace(payload: &SessionStartPayload) -> Option<InjectWorkspace> {
     workspace::find_workspace(&fallback)
 }
 
-fn write_response<W: Write>(out: &mut W, additional_context: &str) -> Result<()> {
+fn write_response<W: Write>(out: &mut W, event_name: &str, additional_context: &str) -> Result<()> {
     let response = serde_json::json!({
         "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
+            "hookEventName": event_name,
             "additionalContext": additional_context,
         },
     });

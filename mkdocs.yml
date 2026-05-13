@@ -63,8 +63,10 @@ nav:
   - Wiki schema: schema.md
   - Capture pipeline: capture.md
   - Recall: recall.md
-  - SessionStart injection: injection.md
+  - Injection: injection.md
   - Troubleshooting: troubleshooting.md
+  - Architecture decisions:
+    - "0001 — MemPalace pivot": adr/0001-mempalace-pivot.md
 
 extra:
   social:
