@@ -10,6 +10,7 @@ dependencies = [
     "stoa-harvest",
     "stoa-crystallize",
     "stoa-embed",
+    "stoa-recall",
 ]
 
 [tool.uv.workspace]
@@ -20,6 +21,7 @@ stoa-shared = { workspace = true }
 stoa-harvest = { workspace = true }
 stoa-crystallize = { workspace = true }
 stoa-embed = { workspace = true }
+stoa-recall = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -86,7 +88,7 @@ ban-relative-imports = "all"
 strict = true
 
 [tool.ruff.lint.isort]
-known-first-party = ["stoa_harvest", "stoa_crystallize", "stoa_embed", "stoa_shared"]
+known-first-party = ["stoa_harvest", "stoa_crystallize", "stoa_embed", "stoa_shared", "stoa_recall"]
 required-imports = ["from __future__ import annotations"]
 combine-as-imports = true
 force-sort-within-sections = true
