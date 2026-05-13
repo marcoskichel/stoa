@@ -118,7 +118,6 @@ fn method_for_event(kind: EventKind) -> Option<&'static str> {
     }
 }
 
-
 fn relative_md(workspace_root: &Path, abs: &Path) -> Option<String> {
     if abs.extension().is_none_or(|e| e != "md") {
         return None;

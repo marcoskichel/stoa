@@ -45,8 +45,7 @@ fn open_refuses_db_under_symlinked_parent() {
     let link_dir = tmp.path().join("link-dir");
     std::os::unix::fs::symlink(&real_dir, &link_dir).unwrap();
     let candidate = link_dir.join("queue.db");
-    let err =
-        Queue::open(&candidate).expect_err("symlinked parent dir must be rejected");
+    let err = Queue::open(&candidate).expect_err("symlinked parent dir must be rejected");
     let msg = format!("{err}");
     assert!(
         msg.contains("symlink"),

@@ -151,9 +151,9 @@ fn canonicalize_inside(
     workspace_root: &Path,
     candidate: &Path,
 ) -> anyhow::Result<std::path::PathBuf> {
-    let root_canon = workspace_root.canonicalize().with_context(|| {
-        format!("canonicalizing workspace root `{}`", workspace_root.display())
-    })?;
+    let root_canon = workspace_root
+        .canonicalize()
+        .with_context(|| format!("canonicalizing workspace root `{}`", workspace_root.display()))?;
     let candidate_canon = canonicalize_lenient(candidate)?;
     if !candidate_canon.starts_with(&root_canon) {
         return Err(anyhow!(
@@ -186,7 +186,10 @@ fn canonicalize_lenient(path: &Path) -> anyhow::Result<std::path::PathBuf> {
         }
         cursor = parent.to_path_buf();
     }
-    Err(anyhow!("could not canonicalize `{}` against any existing ancestor", path.display()))
+    Err(anyhow!(
+        "could not canonicalize `{}` against any existing ancestor",
+        path.display()
+    ))
 }
 
 fn open_bm25(workspace_root: &Path) -> anyhow::Result<Bm25Backend> {

@@ -233,8 +233,7 @@ const JSONL_CAP_BYTES: u64 = 50 * 1024 * 1024;
 /// files are skipped + logged with the file kind so operators can
 /// spot the cause in the daemon log.
 fn read_capped(path: &Path, cap_bytes: u64, kind: &str) -> anyhow::Result<Option<String>> {
-    let meta = fs::metadata(path)
-        .with_context(|| format!("stat `{}`", path.display()))?;
+    let meta = fs::metadata(path).with_context(|| format!("stat `{}`", path.display()))?;
     if meta.len() > cap_bytes {
         tracing::warn!(
             path = %path.display(),
@@ -245,7 +244,6 @@ fn read_capped(path: &Path, cap_bytes: u64, kind: &str) -> anyhow::Result<Option
         );
         return Ok(None);
     }
-    let raw = fs::read_to_string(path)
-        .with_context(|| format!("reading `{}`", path.display()))?;
+    let raw = fs::read_to_string(path).with_context(|| format!("reading `{}`", path.display()))?;
     Ok(Some(raw))
 }

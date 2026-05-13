@@ -134,11 +134,7 @@ pub trait RecallBackend: Send + Sync + 'static {
     /// Default impl returns [`RecallError::Unimplemented`] — the M4
     /// backends ship without graph traversal; M5 wires it via the KG
     /// tables. Implementing this is opt-in per backend.
-    async fn graph_neighbors(
-        &self,
-        _doc_id: &str,
-        _k: usize,
-    ) -> Result<Vec<String>, RecallError> {
+    async fn graph_neighbors(&self, _doc_id: &str, _k: usize) -> Result<Vec<String>, RecallError> {
         Err(RecallError::Unimplemented("RecallBackend::graph_neighbors"))
     }
 
