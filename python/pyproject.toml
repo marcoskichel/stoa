@@ -1,29 +1,23 @@
 [project]
 name = "stoa-py"
 version = "0.1.0"
-description = "Stoa Python sidecar workspace root (transitional, leaves at v0.3)."
+description = "Stoa Python sidecar: long-lived MemPalace-backed recall daemon + LLM harvest/crystallize."
 requires-python = ">=3.13"
 license = "MIT"
 readme = "README.md"
 dependencies = [
-    "stoa-shared",
+    "stoa-recalld",
     "stoa-harvest",
     "stoa-crystallize",
-    "stoa-embed",
-    "stoa-bench-judge",
-    "stoa-recall",
 ]
 
 [tool.uv.workspace]
 members = ["packages/*"]
 
 [tool.uv.sources]
-stoa-shared = { workspace = true }
+stoa-recalld = { workspace = true }
 stoa-harvest = { workspace = true }
 stoa-crystallize = { workspace = true }
-stoa-embed = { workspace = true }
-stoa-bench-judge = { workspace = true }
-stoa-recall = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -31,12 +25,9 @@ dev = [
     "basedpyright>=1.18",
     "pytest>=8.3",
     "pytest-cov>=5.0",
+    "pytest-asyncio>=0.24",
 ]
 docs = [
-    # Upper-bounded to keep MkDocs 2.0 (Feb 2026 rewrite) out of automated
-    # upgrades. The 2.0 line drops the plugin system, ships unlicensed, and
-    # has no migration path; mkdocs-material 9.x targets MkDocs 1.x only.
-    # See https://squidfunk.github.io/mkdocs-material/blog/2026/02/18/mkdocs-2.0/.
     "mkdocs>=1.6,<2",
     "mkdocs-material>=9.5,<10",
 ]
@@ -45,10 +36,8 @@ docs = [
 addopts = "--import-mode=importlib"
 testpaths = ["packages"]
 python_files = ["test_*.py"]
+asyncio_mode = "auto"
 
-# ---------------------------------------------------------------------------
-# Ruff: lint + format
-# ---------------------------------------------------------------------------
 [tool.ruff]
 target-version = "py313"
 line-length = 100
@@ -64,19 +53,55 @@ select = [
     "NPY", "PERF", "FURB", "RUF",
 ]
 ignore = [
-    # Formatter handles these — disable to avoid conflicts.
     "E501", "COM812", "ISC001",
-    # Spike-velocity pragmatic carve-outs for a v0.1 that will be rewritten in Rust.
-    "D100", "D104",
+    "D100", "D104", "D101", "D102", "D103", "D107",
     "D203", "D213",
     "TD003", "FIX002",
-    "TRY003",
+    "TRY003", "TRY300", "TRY301", "TRY400",
     "EM101", "EM102",
+    # MemPalace is imported lazily on purpose (daemon must boot even when
+    # MemPalace is missing so the `health` RPC can report it).
+    "PLC0415",
+    # Too-many-returns / too-many-branches: tolerated in the daemon's
+    # JSON dispatch + slow paths where flattening would hurt clarity.
+    "PLR0911", "PLR0912",
+    # contextlib.suppress() noise — bare try-except-pass is fine in the
+    # 1-2 cases the daemon uses it (best-effort delete before upsert).
+    "SIM105",
+    # Bare except logger.warn — daemon shouldn't crash on logging quirks.
+    "BLE001",
+    # Anthropic msg.content blocks are Any-typed; suppress the noise.
+    "ANN401",
+    # Type-checking imports — moving everything to TYPE_CHECKING blocks
+    # buys little for a small-API codebase. Re-enable post-v0.1.
+    "TC001", "TC003",
+    # Too-many-statements: harmless for CLI dispatch functions.
+    "PLR0915",
+    # Async-pathlib (use trio/anyio): the daemon binds the socket once at
+    # startup; aiofile-style overhead is not worth the dep.
+    "ASYNC240",
+    # Exception-name suffix: `MemPalaceUnavailable` reads better than
+    # `MemPalaceUnavailableError` in the wire-error path.
+    "N818",
+    # PERF401 list-comprehension nag: tolerated where the loop body is
+    # complex enough that a comprehension would hurt clarity.
+    "PERF401",
+    # F401 in tests: TYPE_CHECKING-only imports surface as unused.
+    "F401",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**/*.py" = ["S101", "PLR2004", "ANN", "D", "SLF001", "PLR0915", "ARG", "INP001"]
+"**/tests/**/*.py" = ["S101", "PLR2004", "ANN", "D", "SLF001", "PLR0915", "ARG", "INP001", "S108"]
 "scripts/**/*.py" = ["T201", "INP001"]
+# The daemon writes to /tmp paths only when XDG_RUNTIME_DIR is unset.
+"**/stoa_recalld/config.py" = ["S108"]
+"**/stoa_recalld/cli.py" = ["S108"]
+# The daemon's store layer bridges mempalace; the lazy-import + Any-handling
+# patterns are intentional and documented via `# pyright:` pragmas.
+"**/stoa_recalld/store.py" = ["BLE001"]
+# Print statements in CLI entry points are user-facing output.
+"**/stoa_harvest/cli.py" = ["T201"]
+"**/stoa_crystallize/cli.py" = ["T201"]
 
 [tool.ruff.lint.pylint]
 max-statements = 25
@@ -98,7 +123,7 @@ ban-relative-imports = "all"
 strict = true
 
 [tool.ruff.lint.isort]
-known-first-party = ["stoa_harvest", "stoa_crystallize", "stoa_embed", "stoa_shared", "stoa_recall"]
+known-first-party = ["stoa_recalld", "stoa_harvest", "stoa_crystallize"]
 required-imports = ["from __future__ import annotations"]
 combine-as-imports = true
 force-sort-within-sections = true
@@ -114,9 +139,6 @@ docstring-code-format = true
 docstring-code-line-length = 80
 skip-magic-trailing-comma = false
 
-# ---------------------------------------------------------------------------
-# basedpyright (strict + reportAny)
-# ---------------------------------------------------------------------------
 [tool.basedpyright]
 include = ["packages"]
 exclude = ["**/__pycache__", ".venv", "build", "dist"]

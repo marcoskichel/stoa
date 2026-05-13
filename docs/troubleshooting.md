@@ -1,147 +1,124 @@
 # Troubleshooting
 
-Common first-run failures and how to recover.
+## `stoa daemon status` says "daemon unavailable"
 
-## "`stoa: command not found`"
-
-The CLI is installed via `cargo install` and lives at `~/.cargo/bin/stoa`.
-That directory has to be on your `PATH`:
+The daemon isn't running. Start it:
 
 ```bash
-echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc
-exec $SHELL
+stoa daemon start
+sleep 1
+stoa daemon status
 ```
 
-If you used `--git` install: confirm `cargo install --git ...` exited
-without errors. Compile errors there get swallowed if you skip the
-last lines of output.
-
-## `cross: invalid toolchain name: 'usr'` (Arch Linux)
-
-Arch ships Rust as a system package at `/usr/bin/cargo`. That shadows
-the rustup-managed cargo at `~/.cargo/bin/cargo`, and `cross-rs` reads
-rustup metadata that does not exist for the system Rust:
+If the daemon is supposedly running but the socket is unreachable, check the PID file and log:
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
-export RUSTUP_TOOLCHAIN=stable
+cat $XDG_RUNTIME_DIR/stoa-recalld.pid          # or /tmp/stoa-recalld-$USER.pid
+tail -50 ~/.local/state/stoa/recalld.log       # or $STOA_RECALLD_LOG_FILE
 ```
 
-This is documented in
-[CONTRIBUTING.md](https://github.com/marcoskichel/stoa/blob/main/CONTRIBUTING.md)
-under "Environment traps".
+If the PID file exists but the process is gone, delete the PID file and start fresh.
 
-## `wine: socket : Function not implemented` (cross-build to Windows on Linux ≥ 7.x)
+## `stoa daemon start` fails with "No STOA.md found"
 
-The seccomp profile inside the cross-rs Windows-gnu container blocks a
-syscall wine needs:
+The daemon binds to the workspace containing `STOA.md`. If you're outside a workspace, scaffold one first:
 
 ```bash
-export CROSS_CONTAINER_OPTS="--security-opt seccomp=unconfined"
+cd ~/projects/myapp
+stoa init
+stoa daemon start
 ```
 
-Local-only; production CI builds Windows on a native runner.
+## `stoa daemon start` fails with "mempalace package not installed"
 
-## "Hook fired but nothing landed in `sessions/`"
-
-The capture pipeline is asynchronous. The hook only enqueues a row;
-the actual write happens in the daemon's capture worker. Check the
-daemon is running:
+Install MemPalace:
 
 ```bash
-pgrep -fa 'stoa daemon'
+uv tool install mempalace
+# or
+pip install mempalace
 ```
 
-If it is not, start it:
+The daemon imports `mempalace` lazily but will surface a clear error in the health response.
 
-```bash
-stoa daemon &
-```
-
-Then check the audit log:
-
-```bash
-tail -n 5 .stoa/audit.log
-```
-
-You should see one `transcript.captured` event per processed row.
-(Injection events use the `stoa.inject` prefix — the two flows have
-different event names.)
-
-## `stoa query` returns no hits
-
-Three causes are common:
-
-1. **Index never built.** Run `stoa index rebuild`. This regenerates
-   `.stoa/recall.db` and `.stoa/vectors/` from `wiki/`, `raw/`, and
-   `sessions/`.
-2. **Embedding model not downloaded.** On first run Stoa fetches
-   `bge-small-en-v1.5`. Watch for network errors in daemon stderr. If
-   the model is unavailable, start a new workspace with
-   `stoa init --no-embeddings` to fall back to BM25-only.
-3. **Query is below the relevance floor.** SessionStart injection skips
-   anything below a configured floor to avoid noise. `stoa query`
-   itself does not apply the floor; if `query` returns 0 hits, the
-   issue is index coverage, not gating.
-
-## SessionStart injection is empty
+## Empty injections in Claude Code sessions
 
 Run:
 
 ```bash
-stoa inject log --limit 1
+stoa inject log --limit 5
 ```
 
-The audit entry shows `hits=N`. If `hits=0`, Stoa did not find anything
-relevant for the session's cwd / git remote / recent wiki pages. This
-is the intended behavior — Stoa does not inject when it has no signal.
+Each row has `hits` (count) and `chars_injected`. If both are zero across every recent session:
 
-If `hits>0` but you do not see the `<stoa-memory>` block in the agent's
-context: confirm the hook is actually registered. `stoa hook install
---platform claude-code --inject session-start` only **prints** the
-snippet; the snippet must be pasted into your Claude Code
-`settings.json` and the `stoa-inject-hook` binary must be on `$PATH`:
+- **Wiki is empty.** Write some pages with `stoa write`, or run `stoa-harvest run`.
+- **Query produces no matches.** Check what the hook is asking: the `query` field in the audit log shows the effective query. Try the same query manually with `stoa query "..."`.
+- **Daemon is unreachable.** `stoa daemon status` should respond.
+
+## `stoa inject log` shows hits but the agent doesn't act on them
+
+Check that the snippet content is what you expect — the agent sees the literal `additional_context` field. Common causes:
+
+- Wiki pages are very short and contain only frontmatter / placeholders. The snippet body is just the markdown body; if the body is `(no excerpt)`, the agent has nothing to anchor on.
+- The wiki page title doesn't appear in the body. The H1 (`# Redis`) is often what gives the model enough surface to act on.
+
+## `stoa write` fails with "frontmatter.kind must be one of entity|concept|synthesis"
+
+Your frontmatter YAML is missing the `kind:` field or has a value Stoa doesn't accept. Required values: `entity`, `concept`, `synthesis`. See [schema.md](schema.md) for the full required-fields list.
+
+## `stoa schema --check` reports "missing required field `type` for entity"
+
+Entity pages MUST carry a `type:` field. Add it:
+
+```yaml
+---
+id: ent-redis
+title: Redis
+kind: entity
+type: library    # ← this line
+status: active
+created: ...
+updated: ...
+---
+```
+
+The `type` value must be in the schema's entity-types allow-list (defaults: `library`, `service`, `tool`, `team`, `concept`).
+
+## Hooks fire but `additionalContext` never appears in the agent's view
+
+Claude Code only honors the `hookSpecificOutput` shape with `hookEventName` matching the actual event. Check the snippet in `~/.claude/settings.json` matches the snippet `stoa hook install --inject` prints. Common mistake: only wiring `SessionStart` and expecting per-prompt injection — `UserPromptSubmit` is the per-prompt path.
+
+## Cold-start latency on the first prompt feels long
+
+Realistic warm-up is ~400-800 ms — MemPalace loads its HNSW segment lazily on the first query. Mitigations:
+
+- Start the daemon before launching Claude Code: `stoa daemon start` in a terminal first.
+- Wait until `stoa daemon status` returns a `mempalace_version` before opening a session.
+
+## "I edited a wiki page by hand; `stoa query` doesn't find it"
+
+Hand edits skip the daemon's `write_wiki` RPC, so the MemPalace index never sees them. Either:
+
+- Re-write the page through `stoa write` (idempotent).
+- Run `stoa-harvest run` — the harvest worker re-pulls drawers and emits write_wiki calls, but the page won't appear unless harvest's LLM picks it up.
+
+A future `stoa index rebuild` will let you re-mirror `wiki/*.md` into MemPalace without using the LLM. Tracked in [ROADMAP.md](https://github.com/marcoskichel/stoa/blob/main/ROADMAP.md) §M-v0.1.x.
+
+## Audit log keeps reporting empty injections
+
+Means the hook is wired correctly but the daemon returns no hits. Cross-check with `stoa query` for the same effective query (from the audit row). If `stoa query` returns hits but the audit log shows zero, file a bug — the inject hook's query ladder may be filtering harder than expected.
+
+## MemPalace warns "this palace was created without cosine distance"
+
+A legacy palace was created with the default L2 metric. Fix:
 
 ```bash
-which stoa-inject-hook         # must resolve
+mempalace repair
 ```
 
-Re-print the snippet for reference:
+Then restart the daemon: `stoa daemon stop && stoa daemon start`. Stoa initializes palaces with cosine distance for new workspaces, so this only affects palaces predating the pivot.
 
-```bash
-stoa hook install --platform claude-code --inject session-start
-```
+## Where to get help
 
-## "Injected snippet contains `<stoa-memory>` inside a snippet body"
-
-Stoa's MINJA defense splices a U+2060 word joiner inside any
-`<stoa-memory` or `</stoa-memory` substring in snippet bodies, source
-paths, and queries. The wrapped text renders identically to humans;
-the joiner stops the snippet from closing the envelope.
-
-If you see what looks like an unescaped tag inside the block, copy it
-into a hex viewer — the word joiner is invisible but present. The
-regression test asserts that exactly **one** open tag and **one** close
-tag survive sanitization regardless of snippet content.
-
-## Hook latency feels slow
-
-The capture hook target is **<10 ms p95**. If the agent UI feels
-sluggish on session end, the daemon may be holding the queue lock or
-the hook binary may not be the one you installed. Check:
-
-```bash
-which stoa-hook
-stoa-hook --version
-```
-
-The path must point at a release-mode binary, not a debug build.
-`cargo install` defaults to release; `just install-dev` also does.
-
-## Where else to look
-
-- `ARCHITECTURE.md` — load-bearing invariants and design rationale.
-- `ROADMAP.md` — what is shipped vs what is deferred.
-- [GitHub Issues](https://github.com/marcoskichel/stoa/issues) — open
-  one if your case is not covered above. The issue template prompts
-  for the exact reproduction info maintainers need.
+- File an issue: https://github.com/marcoskichel/stoa/issues
+- Discord (MemPalace's): linked from MemPalace's README; relevant for MemPalace-specific questions.

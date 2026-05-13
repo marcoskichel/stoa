@@ -1,62 +1,40 @@
-//! Run a BM25 recall query against `<workspace>/.stoa/recall.db`.
+//! Daemon-driven recall for the inject hook.
 //!
-//! BM25-only on purpose: the `IpcBackend` requires the Python sidecar,
-//! which the inject hook MUST NOT depend on (the hook runs synchronously
-//! at session start, sub-10ms p95). The sync `Bm25Backend::search_bm25`
-//! is called directly to avoid building a `tokio` runtime per query.
+//! Connects to `stoa-recalld` over its Unix socket and asks for the
+//! top-K wiki hits for each query in the ladder, stopping on the first
+//! non-empty hit set. The daemon is allowed to be missing — if the
+//! socket is unreachable, the hook degrades to an empty injection.
 
-use std::path::Path;
+use stoa_recall::{Filters, Hit, MempalaceBackend, RecallBackend};
 
-use stoa_recall::Hit;
-use stoa_recall_local_chroma_sqlite::Bm25Backend;
+/// Top-K hits to ask for. The token-budget cap in `wrap.rs` truncates
+/// further when the snippet bodies are long.
+pub(crate) const RECALL_K: usize = 8;
 
-/// Number of BM25 hits to ask for. Token-budget cap downstream
-/// truncates further.
-pub(crate) const RECALL_K: usize = 12;
-
-/// Try each query in `ladder` in order; return the first that yields
-/// at least one hit, paired with the query string that produced it.
-///
-/// Hard guarantee per ARCH §6.2: missing or unhealthy recall MUST
-/// degrade to empty injection rather than failing the hook. We log
-/// errors via `tracing::warn` but never propagate them. An empty
-/// ladder, an unopenable DB, or a ladder where every query returns
-/// zero hits all yield `(<best-effort query>, Vec::new())` so the
-/// caller can audit the attempt and skip injection.
-pub(crate) fn search_first_with_hits(db_path: &Path, ladder: &[String]) -> (String, Vec<Hit>) {
+/// Run each query against `backend` until one returns a non-empty hit
+/// set. Returns `(query, hits)`; an empty `hits` means no query in the
+/// ladder produced a match (or the daemon was unreachable).
+pub(crate) async fn search_first_with_hits(
+    backend: &MempalaceBackend,
+    ladder: &[String],
+) -> (String, Vec<Hit>) {
     let primary = ladder.first().cloned().unwrap_or_default();
-    if ladder.is_empty() || !db_path.is_file() {
+    if ladder.is_empty() {
         return (primary, Vec::new());
     }
-    let backend = match Bm25Backend::open(db_path) {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::warn!(?e, db = %db_path.display(), "inject: open recall.db failed");
-            return (primary, Vec::new());
-        },
-    };
-    iterate_ladder(&backend, ladder, primary)
-}
-
-fn iterate_ladder(backend: &Bm25Backend, ladder: &[String], primary: String) -> (String, Vec<Hit>) {
+    let filters = Filters::wiki_only();
     for query in ladder {
         if query.trim().is_empty() {
             continue;
         }
-        let hits = run_search(backend, query);
-        if !hits.is_empty() {
-            return (query.clone(), hits);
+        match backend.search(query, RECALL_K, &filters).await {
+            Ok(hits) if !hits.is_empty() => return (query.clone(), hits),
+            Ok(_) => {},
+            Err(e) => {
+                tracing::warn!(?e, query, "inject: daemon search failed");
+                return (query.clone(), Vec::new());
+            },
         }
     }
     (primary, Vec::new())
-}
-
-fn run_search(backend: &Bm25Backend, query: &str) -> Vec<Hit> {
-    match backend.search_bm25(query, RECALL_K) {
-        Ok(hits) => hits,
-        Err(e) => {
-            tracing::warn!(?e, "inject: bm25 search failed");
-            Vec::new()
-        },
-    }
 }

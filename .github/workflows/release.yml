@@ -47,19 +47,20 @@ jobs:
         with:
           tool: cross
 
-      - name: build stoa-cli + stoa-hooks
+      - name: build all three binaries
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
           USE_CROSS: ${{ matrix.use-cross }}
         run: |
           if [ "$USE_CROSS" = "true" ]; then
-            cross build --release --locked --target "$TARGET" -p stoa-cli
-            cross build --release --locked --target "$TARGET" -p stoa-hooks
+            builder="cross"
           else
-            cargo build --release --locked --target "$TARGET" -p stoa-cli
-            cargo build --release --locked --target "$TARGET" -p stoa-hooks
+            builder="cargo"
           fi
+          "$builder" build --release --locked --target "$TARGET" -p stoa-cli
+          "$builder" build --release --locked --target "$TARGET" -p stoa-hooks
+          "$builder" build --release --locked --target "$TARGET" -p stoa-inject-hooks
 
       - name: package
         shell: bash
@@ -70,7 +71,8 @@ jobs:
           ext=""
           case "$TARGET" in *windows*) ext=".exe" ;; esac
           tar -czf "dist/stoa-${TARGET}.tar.gz" \
-              -C "target/${TARGET}/release" "stoa${ext}" "stoa-hook${ext}"
+              -C "target/${TARGET}/release" \
+              "stoa${ext}" "stoa-hook${ext}" "stoa-inject-hook${ext}"
 
       - uses: actions/upload-artifact@v7
         with:

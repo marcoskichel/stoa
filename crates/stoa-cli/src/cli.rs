@@ -1,182 +1,165 @@
-//! Clap definitions for the `stoa` CLI.
+//! Clap definitions for the `stoa` CLI surface.
 //!
-//! Subcommands map 1-to-1 onto sibling modules (`init`, `read`, `write`,
-//! `schema`). Each handler is responsible for its own output + exit code.
+//! Verbs map 1:1 to functions in [`crate::commands`]. The argument
+//! shapes are stable enough that downstream tooling can pin against
+//! them; semver discipline applies to additions, not removals.
 
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-/// Open-core knowledge + memory system for AI agents.
-#[derive(Parser, Debug)]
+/// Top-level CLI.
+#[derive(Debug, Parser)]
 #[command(
     name = "stoa",
     version,
-    about = ABOUT,
-    long_about = None,
-    disable_help_subcommand = true,
-    disable_help_flag = true,
+    about = "Stoa: MemPalace-backed memory + LLM wiki for AI agents."
 )]
 pub(crate) struct Cli {
+    /// Subcommand to dispatch.
     #[command(subcommand)]
     pub(crate) command: Command,
 }
 
-/// Crate-level about line surfaced in `--help`.
-pub(crate) const ABOUT: &str = "Open-core knowledge + memory system for AI agents.";
+impl Cli {
+    /// Wrapper around [`clap::Parser::parse`] for the binary entry point.
+    pub(crate) fn parse() -> Self {
+        <Self as Parser>::parse()
+    }
+}
 
-/// Custom help body emitted by `stoa --help`. Pinned by the
-/// `tests/cmd/help.trycmd` golden snapshot.
-pub(crate) const HELP_BODY: &str = "\
-Open-core knowledge + memory system for AI agents.
-
-  init    Scaffold a fresh Stoa workspace (idempotent)
-  read    Print a wiki page
-  write   Create or update a wiki page
-  schema  Print or validate the workspace schema
-  query   Hybrid recall over the indexed corpus
-  index   Manage the recall index (FTS5 + KG)
-  inject  Inspect SessionStart injection history
-
-";
-
-/// Top-level subcommands.
-#[derive(Subcommand, Debug)]
+/// CLI subcommands.
+#[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Scaffold a fresh Stoa workspace (idempotent).
-    Init {
-        /// Skip Python sidecar bootstrap; BM25-only workspace (<5s cold start).
-        #[arg(long)]
-        no_embeddings: bool,
-    },
+    /// Scaffold a fresh workspace (STOA.md + wiki/* + .stoa/).
+    Init(InitArgs),
 
-    /// Print a wiki page (frontmatter + body) to stdout.
-    Read {
-        /// Page id, e.g. `ent-redis` / `con-rag` / `syn-…`.
-        id: String,
-    },
-
-    /// Create or update a wiki page.
-    Write {
-        /// Page id; routed by prefix (`ent-`/`con-`/`syn-`).
-        id: String,
-        /// Path to a YAML frontmatter file (optional on update).
-        #[arg(long)]
-        frontmatter: Option<PathBuf>,
-        /// Path to a markdown body file (optional on update).
-        #[arg(long)]
-        body: Option<PathBuf>,
-    },
-
-    /// Print or validate the workspace schema (`STOA.md`).
-    Schema {
-        /// Validate every wiki page against the schema instead of printing.
-        #[arg(long)]
-        check: bool,
-    },
-
-    /// Run the capture daemon (or a single drain cycle with `--once`).
+    /// Long-lived daemon lifecycle.
     Daemon {
-        /// Drain one row and exit instead of running the long-lived loop.
-        #[arg(long)]
-        once: bool,
+        /// Daemon action to take.
+        #[command(subcommand)]
+        action: DaemonAction,
     },
 
-    /// Manage Stoa hooks for an agent platform.
+    /// Print Claude Code hook configuration snippets.
     Hook {
+        /// Hook action.
         #[command(subcommand)]
         action: HookAction,
     },
 
-    /// Hybrid recall over the indexed corpus.
-    Query {
-        /// Query string.
-        q: String,
-        /// Emit JSON `{hits: [...]}` instead of human-readable lines.
-        #[arg(long)]
-        json: bool,
-        /// Comma-separated streams: `vector`, `bm25`, `graph`. Default: all.
-        #[arg(long, value_delimiter = ',')]
-        streams: Vec<String>,
-        /// Cap on returned hits.
-        #[arg(long, default_value_t = 10)]
-        k: usize,
-    },
+    /// Print or validate the active `STOA.md` schema.
+    Schema(SchemaArgs),
 
-    /// Manage the recall index (FTS5 + KG).
-    Index {
-        #[command(subcommand)]
-        action: IndexAction,
-    },
+    /// Write (or overwrite) a wiki page.
+    Write(WriteArgs),
 
-    /// Inspect `SessionStart` injection history (`.stoa/audit.log`).
+    /// Read a wiki page (frontmatter + body) back from disk.
+    Read(ReadArgs),
+
+    /// Query the wiki + verbatim drawers via the daemon.
+    Query(QueryArgs),
+
+    /// Inspect or tail the injection audit log.
     Inject {
+        /// Inject action.
         #[command(subcommand)]
         action: InjectAction,
     },
 }
 
-/// `stoa hook ...` sub-subcommands.
-#[derive(Subcommand, Debug)]
+/// `stoa init` arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct InitArgs {
+    /// Directory to scaffold (defaults to current dir).
+    #[arg(default_value = ".")]
+    pub(crate) dir: PathBuf,
+}
+
+/// `stoa daemon` subcommands.
+#[derive(Debug, Subcommand)]
+pub(crate) enum DaemonAction {
+    /// Spawn the daemon in the background.
+    Start,
+    /// Stop the daemon (SIGTERM).
+    Stop,
+    /// Health-probe the daemon over its socket.
+    Status,
+}
+
+/// `stoa hook` subcommands.
+#[derive(Debug, Subcommand)]
 pub(crate) enum HookAction {
-    /// Print the registration snippet for the given platform.
-    Install {
-        /// Target platform (e.g. `claude-code`).
-        #[arg(long)]
-        platform: String,
-        /// Emit the `SessionStart` injection snippet instead of the
-        /// capture snippet (e.g. `--inject session-start`).
-        #[arg(long, value_name = "KIND")]
-        inject: Option<String>,
-    },
+    /// Print the Claude Code hook installation snippet.
+    Install(HookInstallArgs),
 }
 
-/// `stoa inject ...` sub-subcommands.
-#[derive(Subcommand, Debug)]
+/// `stoa hook install` arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct HookInstallArgs {
+    /// Agent platform to emit a snippet for.
+    #[arg(long, default_value = "claude-code")]
+    pub(crate) platform: String,
+    /// Include `UserPromptSubmit` + `SessionStart` inject hooks.
+    #[arg(long, default_value_t = true)]
+    pub(crate) inject: bool,
+}
+
+/// `stoa schema` arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct SchemaArgs {
+    /// Validate the wiki against STOA.md instead of printing it.
+    #[arg(long)]
+    pub(crate) check: bool,
+}
+
+/// `stoa write` arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct WriteArgs {
+    /// Page id (e.g. `ent-redis`).
+    pub(crate) page_id: String,
+    /// Path to a YAML file holding the page frontmatter.
+    #[arg(long)]
+    pub(crate) frontmatter: PathBuf,
+    /// Path to a markdown file holding the page body.
+    #[arg(long)]
+    pub(crate) body: PathBuf,
+}
+
+/// `stoa read` arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct ReadArgs {
+    /// Page id.
+    pub(crate) page_id: String,
+}
+
+/// `stoa query` arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct QueryArgs {
+    /// Free-text query.
+    pub(crate) query: String,
+    /// Max hits to return.
+    #[arg(long, default_value_t = 5)]
+    pub(crate) top_k: usize,
+    /// Drop the default `kind=wiki` filter (returns drawer hits too).
+    #[arg(long)]
+    pub(crate) include_drawers: bool,
+}
+
+/// `stoa inject` subcommands.
+#[derive(Debug, Subcommand)]
 pub(crate) enum InjectAction {
-    /// Print injection history from `.stoa/audit.log`.
-    Log {
-        /// Restrict to events for a single session id.
-        #[arg(long)]
-        session: Option<String>,
-        /// Cap on returned events (most recent first).
-        #[arg(long)]
-        limit: Option<usize>,
-    },
+    /// Tail the injection audit log.
+    Log(InjectLogArgs),
 }
 
-/// `stoa index ...` sub-subcommands.
-#[derive(Subcommand, Debug)]
-pub(crate) enum IndexAction {
-    /// Drop and rebuild the FTS5 + vector index from `wiki/` + `sessions/`.
-    Rebuild,
-}
-
-impl Cli {
-    /// Dispatch to the relevant subcommand handler.
-    pub(crate) fn dispatch(self) -> anyhow::Result<()> {
-        match self.command {
-            Command::Init { no_embeddings } => crate::init::run(no_embeddings),
-            Command::Read { id } => crate::read::run(&id),
-            Command::Write { id, frontmatter, body } => {
-                crate::write::run(&id, frontmatter.as_deref(), body.as_deref())
-            },
-            Command::Schema { check } => crate::schema::run(check),
-            Command::Daemon { once } => crate::daemon::run(once),
-            Command::Hook { action } => match action {
-                HookAction::Install { platform, inject } => {
-                    crate::hook::install(&platform, inject.as_deref())
-                },
-            },
-            Command::Query { q, json, streams, k } => crate::query::run(&q, json, &streams, k),
-            Command::Index { action } => match action {
-                IndexAction::Rebuild => crate::index::rebuild(),
-            },
-            Command::Inject { action } => match action {
-                InjectAction::Log { session, limit } => {
-                    crate::inject::log(session.as_deref(), limit)
-                },
-            },
-        }
-    }
+/// `stoa inject log` arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct InjectLogArgs {
+    /// Max rows to print.
+    #[arg(long, default_value_t = 20)]
+    pub(crate) limit: usize,
+    /// Filter rows to a specific session id.
+    #[arg(long)]
+    pub(crate) session: Option<String>,
 }

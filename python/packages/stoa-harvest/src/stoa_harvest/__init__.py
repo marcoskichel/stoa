@@ -1,8 +1,5 @@
-"""Stoa transcript harvest worker.
-
-M1 skeleton — concrete API lands in later milestones (post-M3).
-"""
+"""Stoa harvest worker: distills MemPalace drawers into LLM wiki pages."""
 
 from __future__ import annotations
 
-VERSION: str = "0.1.0"
+__version__ = "0.1.0"

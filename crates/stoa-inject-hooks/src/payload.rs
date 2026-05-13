@@ -1,8 +1,15 @@
-//! `SessionStart` hook payload — typed view over Claude Code's stdin JSON.
+//! Claude Code hook payload parsing.
 //!
-//! Every field is optional: Claude Code may add or rename fields between
-//! versions, and missing values must degrade to "no injection" rather
-//! than a hook failure (graceful degradation per ARCH §6.2).
+//! Same binary handles two Claude Code hook events:
+//!
+//! - `SessionStart` — fires once per session boot. Payload carries
+//!   `session_id`, `cwd`, `source` (startup/resume/clear/compact).
+//! - `UserPromptSubmit` — fires before each user message. Payload
+//!   carries `session_id`, `cwd`, `prompt` (the user's submitted text).
+//!
+//! Both events are coalesced into one [`HookPayload`] with optional
+//! fields. Missing fields degrade to "no injection" (the hook returns
+//! an empty `additionalContext`) rather than producing an error.
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -10,59 +17,81 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::Deserialize;
 
-/// Parsed Claude-Code `SessionStart` payload.
+/// Hook event flavor — drives the `additionalContext` JSON output tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookEvent {
+    /// `SessionStart` — fires on session boot. Query is built from
+    /// cwd + git remote + recently-edited wiki pages.
+    SessionStart,
+    /// `UserPromptSubmit` — fires per user prompt. Query is built
+    /// primarily from the prompt text plus the workspace signals.
+    UserPromptSubmit,
+}
+
+impl HookEvent {
+    /// Wire name for the `hookEventName` field in the response JSON.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SessionStart => "SessionStart",
+            Self::UserPromptSubmit => "UserPromptSubmit",
+        }
+    }
+
+    fn parse(raw: Option<&str>) -> Self {
+        match raw {
+            Some("UserPromptSubmit") => Self::UserPromptSubmit,
+            _ => Self::SessionStart,
+        }
+    }
+}
+
+/// Parsed Claude Code hook payload.
 ///
-/// All fields are optional. Defaults match the empty-string / `None`
-/// expected by the audit + wrap layers, so a malformed payload never
-/// short-circuits with a panic — it produces an empty injection
-/// instead.
+/// All fields optional. The hook never panics on a malformed payload —
+/// missing values produce an empty injection.
 #[derive(Debug, Default, Deserialize)]
-pub(crate) struct SessionStartPayload {
+pub(crate) struct HookPayload {
     #[serde(default)]
     pub(crate) hook_event_name: Option<String>,
     #[serde(default)]
     pub(crate) session_id: Option<String>,
     #[serde(default)]
     pub(crate) cwd: Option<PathBuf>,
+    #[serde(default)]
+    pub(crate) prompt: Option<String>,
 }
 
-impl SessionStartPayload {
-    /// Borrow the session id with `""` as the default — the audit
-    /// log records an empty string so a missing id stays grep-friendly.
+impl HookPayload {
+    /// Borrow the session id with `""` as the default.
     pub(crate) fn session_id_str(&self) -> &str {
         self.session_id.as_deref().unwrap_or("")
     }
 
-    /// Return the literal `hook_event_name` or fall back to
-    /// `"SessionStart"` so the audit log row stays consistent with
-    /// the contract Claude Code pins on the inbound event.
+    /// Return the resolved hook event flavor.
+    pub(crate) fn event(&self) -> HookEvent {
+        HookEvent::parse(self.hook_event_name.as_deref())
+    }
+
+    /// Wire name for the response `hookEventName`.
     pub(crate) fn hook_event_name_str(&self) -> &str {
-        self.hook_event_name.as_deref().unwrap_or("SessionStart")
+        self.event().as_str()
     }
 }
 
-/// Cap on stdin payload bytes. Real Claude-Code `SessionStart`
-/// payloads are <2 KiB; 256 KiB leaves headroom while bounding the
-/// worst-case allocation. Anything larger is treated as a hostile
-/// input — the hook returns the default payload (graceful no-op)
-/// instead of OOM-ing or blocking on a JSON-bomb decode.
+/// Cap on stdin payload bytes. Real Claude Code payloads are <8 KiB.
 const MAX_PAYLOAD_BYTES: u64 = 256 * 1024;
 
-/// Read up to [`MAX_PAYLOAD_BYTES`] of stdin and parse the result as a
-/// `SessionStart` payload.
+/// Read up to [`MAX_PAYLOAD_BYTES`] of stdin and parse as a hook payload.
 ///
-/// Empty stdin yields the default payload (no fields set) so invoking
-/// the hook with no input mirrors invoking it from a workspace that
-/// has no recall db: graceful no-op, success exit. Oversize stdin is
-/// also degraded to the default payload — the cap is a hard ceiling,
-/// not a parse error, because a hostile peer who can stuff stdin must
-/// not be able to fail the hook.
-pub(crate) fn read_payload<R: Read>(stdin: R) -> Result<SessionStartPayload> {
+/// Empty or oversize input both degrade to the default payload so the
+/// hook stays a no-op rather than failing the agent's startup path.
+pub(crate) fn read_payload<R: Read>(stdin: R) -> Result<HookPayload> {
     let mut limited = stdin.take(MAX_PAYLOAD_BYTES + 1);
     let mut buf = String::new();
     let bytes = limited.read_to_string(&mut buf)?;
     if bytes as u64 > MAX_PAYLOAD_BYTES || buf.trim().is_empty() {
-        return Ok(SessionStartPayload::default());
+        return Ok(HookPayload::default());
     }
     Ok(serde_json::from_str(&buf).unwrap_or_default())
 }
