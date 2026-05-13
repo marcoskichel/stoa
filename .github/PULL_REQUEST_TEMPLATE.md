@@ -1,13 +1,12 @@
 <!--
-Title format: <type>(<scope>)?: <subject>     (Conventional Commits)
-Examples:
-  feat(stoa-cli): add `stoa inject log --json`
-  fix(stoa-hooks): drop runtime tokio dep from cold-start path
-  docs(M6): wire CHANGELOG check into ci-rust
-
+PR title MUST use Conventional Commits 1.0.0:
+    <type>(<scope>)?: <subject>
 Types: feat, fix, docs, refactor, perf, test, build, ci, chore, revert.
-Breaking change: append `!` and add a `BREAKING CHANGE:` footer in the
-final commit message.
+Breaking: append `!` and include a `BREAKING CHANGE:` footer.
+Full guide: CONTRIBUTING.md §"Commits and PR titles".
+
+The body sections below are visible in the GitHub PR preview — please fill
+all three. Delete the HTML comments after you've read them.
 -->
 
 ## Summary
@@ -24,20 +23,21 @@ commands you ran. For UI / hook changes, describe the manual session
 you exercised.
 -->
 
-- [ ] `just ci` green locally
+- [ ] `just ci` passes locally
 - [ ] Added or updated tests at `<path>`
 - [ ] Manual verification:
 
 ## Risk + rollout
 
 <!--
-- Does this touch the hook hot path? If so, did the latency benchmark
-  stay under 10 ms p95?
-- Does this change the MINJA wrapper, the audit log schema, or
-  on-disk wiki layout? If so, link the ARCHITECTURE.md section the
-  change reflects.
-- Is this safe to revert with a single `git revert`? If not, explain
-  the cleanup story.
+- Touches the hook hot path? If so, did the latency benchmark stay under
+  10 ms p95?
+- Changes the MINJA wrapper, the audit-log schema, or the on-disk wiki
+  layout? Link the `ARCHITECTURE.md` section the change reflects.
+- Safe to revert with a single `git revert`? If not, explain the cleanup
+  story.
+- Adds or removes a milestone heading in `ROADMAP.md`? `CHANGELOG.md` must
+  match (gate: `just check-changelog`).
 -->
 
 ## Linked issues

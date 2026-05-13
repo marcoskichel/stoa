@@ -13,6 +13,21 @@ The next entry below this line becomes `0.1.0` once the release is tagged.
 Items shipped on `main` since the start of the project are recorded under
 the milestone they belong to so the history matches `ROADMAP.md`.
 
+### Added — M6 (v0.1 release on-ramp, in progress)
+
+- `CHANGELOG.md` adopting the keep-a-changelog 1.1.0 format and
+  documenting every shipped milestone (M0..M5) plus the in-progress
+  M6 release-readiness work itself.
+- `.github/ISSUE_TEMPLATE/{bug_report.md,feature_request.md,config.yml}`
+  + `.github/PULL_REQUEST_TEMPLATE.md` covering the contributor on-ramp;
+  `config.yml` disables blank issues and routes security disclosures
+  to the private GitHub Security Advisories channel.
+- `scripts/check-changelog.sh` enforces keep-a-changelog header
+  invariants, requires an `[Unreleased]` section, derives the
+  required-milestone list from `ROADMAP.md` (so the gate does not rot
+  when a milestone is added), and verifies the on-ramp template files
+  exist. Wired into `just ci-rust`.
+
 ### Added — M5 (SessionStart injection + MINJA defenses)
 
 - `stoa-inject-hook` binary that handles Claude Code `SessionStart` events,
@@ -51,7 +66,9 @@ the milestone they belong to so the history matches `ROADMAP.md`.
 - `stoa daemon` long-running process and capture worker draining the
   queue into redacted JSONL transcripts under `sessions/<id>.jsonl`.
 - Regex PII redaction covering AWS / Stripe / OpenAI / Anthropic /
-  GitHub PAT / bearer / JWT / configurable email + SSH/AWS/GPG paths.
+  GitHub PAT / bearer / JWT / email + SSH/AWS/GPG paths. Patterns
+  are a fixed set in `crates/stoa-capture`; runtime configuration is
+  v0.2 work.
 - `stoa hook install --platform claude-code` registers the
   `Stop` / `SessionEnd` Claude Code hook.
 - Append-only `.stoa/audit.log` for capture events.
@@ -81,8 +98,7 @@ the milestone they belong to so the history matches `ROADMAP.md`.
   Rust).
 - `Justfile` covering `build`, `test`, `lint`, `lint-docs`, `fmt`,
   `typecheck`, `file-length`, `deny`, `machete`, `release`, `ci`.
-- GitHub Actions workflows: `rust.yml`, `python.yml`, `release.yml`,
-  `codeql.yml`, `bench.yml`.
+- GitHub Actions workflows: `rust.yml`, `python.yml`, `release.yml`.
 - Strict lint surface: clippy `pedantic` + `cargo` groups,
   `unsafe_code = forbid`, no `unwrap`/`expect`/`panic`/`todo`/`dbg!`
   in non-test code, `basedpyright` `strict`, ruff with ~40 rule
@@ -111,9 +127,13 @@ the milestone they belong to so the history matches `ROADMAP.md`.
 ### Security
 
 - MINJA wrapper on every injection (M5) — non-negotiable per
-  ROADMAP.md "What does not get cut, ever".
+  `ROADMAP.md` §"What gets cut if MVP scope creeps" (under the
+  "does not get cut, ever" subset).
 - `cargo-deny` advisory + license + bans gate on every PR.
-- CodeQL workflow scanning Rust on every push.
+- CodeQL workflow (`.github/workflows/codeql.yml`) scanning Rust on
+  every push (introduced post-M1 in the CI-hardening pass).
+- `.github/workflows/bench.yml` runs benchmark fixtures (introduced
+  alongside the M4 recall pipeline).
 - Dependabot for Cargo + GitHub Actions ecosystems.
 
 [Unreleased]: https://github.com/marcoskichel/stoa/commits/main

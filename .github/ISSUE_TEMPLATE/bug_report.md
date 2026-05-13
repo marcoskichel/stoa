@@ -36,11 +36,15 @@ Minimal steps a maintainer can run on a clean workspace:
 <!--
 Paste the full output of the failing command. If the bug surfaces
 through Claude Code, also attach the relevant slice of:
-  - `.stoa/audit.log`
-  - `sessions/<session-id>.jsonl`
+  - `.stoa/audit.log` (post-event log; redactor has already run)
+  - `sessions/<session-id>.jsonl` (PRE-REDACTION TRANSCRIPT — see warning)
 
-Redact API keys / personal paths. Stoa's regex redactor catches the
-common cases but please double-check.
+SECURITY: `sessions/*.jsonl` are the *input* to the redactor, not the
+output. They can contain API keys, OAuth tokens, and personal paths
+verbatim. Before pasting any session transcript, redact manually — the
+in-repo regex set in `crates/stoa-capture` covers the common cases
+post-capture, but it has NOT run on the file you read off disk. When in
+doubt, attach a synthetic reproduction instead of the real transcript.
 -->
 
 ```text

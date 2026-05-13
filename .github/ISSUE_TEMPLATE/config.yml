@@ -1,13 +1,12 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Question or design discussion
-    url: https://github.com/marcoskichel/stoa/discussions
-    about: |
-      Open-ended questions, architecture debates, and proposals belong
-      in Discussions. Use the issue templates here for actionable bug
-      reports, concrete feature requests, and benchmark gaps.
   - name: Security disclosure
     url: https://github.com/marcoskichel/stoa/security/advisories/new
     about: |
       Found a security issue? Report it privately via GitHub Security
       Advisories. Do NOT open a public issue. See SECURITY.md.
+  - name: Contributing guide
+    url: https://github.com/marcoskichel/stoa/blob/main/CONTRIBUTING.md
+    about: |
+      Setup, lint rules, commit conventions, and the release flow.
+      Start here before opening an issue for setup or workflow help.
