@@ -50,18 +50,55 @@ const CLAUDE_CODE_SNIPPET: &str = r#"# Claude Code hook registration for Stoa
 }
 "#;
 
-/// Run `stoa hook install --platform <name>`.
-pub(crate) fn install(platform: &str) -> anyhow::Result<()> {
-    let snippet = snippet_for(platform)
-        .with_context(|| format!("no built-in registration template for `{platform}`"))?;
+/// `SessionStart` injection snippet (Claude Code).
+///
+/// `stoa-inject-hook` reads the JSON payload Claude Code sends on
+/// stdin and writes a `hookSpecificOutput.additionalContext` JSON
+/// document on stdout. The matcher pins it to fresh sessions
+/// (`startup`).
+const CLAUDE_CODE_INJECT_SESSION_START_SNIPPET: &str = r#"# Claude Code SessionStart injection hook for Stoa
+#
+# Paste the JSON below into your `~/.config/claude-code/settings.json`
+# under the `hooks` block. The `stoa-inject-hook` binary must be on
+# $PATH; see `cargo install --path crates/stoa-inject-hooks` from the
+# Stoa repo. Default 10 s timeout; the hook degrades to "no injection"
+# if recall is unhealthy or the workspace is missing.
+
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "stoa-inject-hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+"#;
+
+/// Run `stoa hook install --platform <name> [--inject <kind>]`.
+pub(crate) fn install(platform: &str, inject: Option<&str>) -> anyhow::Result<()> {
+    let snippet = snippet_for(platform, inject).with_context(|| {
+        format!("no built-in registration template for `{platform}` (inject={inject:?})")
+    })?;
     emit(snippet);
     Ok(())
 }
 
-fn snippet_for(platform: &str) -> anyhow::Result<&'static str> {
-    match platform {
-        "claude-code" => Ok(CLAUDE_CODE_SNIPPET),
-        other => Err(anyhow!("unknown platform `{other}` — supported: claude-code")),
+fn snippet_for(platform: &str, inject: Option<&str>) -> anyhow::Result<&'static str> {
+    match (platform, inject) {
+        ("claude-code", None) => Ok(CLAUDE_CODE_SNIPPET),
+        ("claude-code", Some("session-start")) => Ok(CLAUDE_CODE_INJECT_SESSION_START_SNIPPET),
+        ("claude-code", Some(other)) => Err(anyhow!(
+            "unknown --inject kind `{other}` for claude-code — supported: session-start"
+        )),
+        (other, _) => Err(anyhow!("unknown platform `{other}` — supported: claude-code")),
     }
 }
 

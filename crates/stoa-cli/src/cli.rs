@@ -36,6 +36,7 @@ Open-core knowledge + memory system for AI agents.
   schema  Print or validate the workspace schema
   query   Hybrid recall over the indexed corpus
   index   Manage the recall index (FTS5 + KG)
+  inject  Inspect SessionStart injection history
 
 ";
 
@@ -107,6 +108,12 @@ pub(crate) enum Command {
         #[command(subcommand)]
         action: IndexAction,
     },
+
+    /// Inspect `SessionStart` injection history (`.stoa/audit.log`).
+    Inject {
+        #[command(subcommand)]
+        action: InjectAction,
+    },
 }
 
 /// `stoa hook ...` sub-subcommands.
@@ -117,6 +124,24 @@ pub(crate) enum HookAction {
         /// Target platform (e.g. `claude-code`).
         #[arg(long)]
         platform: String,
+        /// Emit the `SessionStart` injection snippet instead of the
+        /// capture snippet (e.g. `--inject session-start`).
+        #[arg(long, value_name = "KIND")]
+        inject: Option<String>,
+    },
+}
+
+/// `stoa inject ...` sub-subcommands.
+#[derive(Subcommand, Debug)]
+pub(crate) enum InjectAction {
+    /// Print injection history from `.stoa/audit.log`.
+    Log {
+        /// Restrict to events for a single session id.
+        #[arg(long)]
+        session: Option<String>,
+        /// Cap on returned events (most recent first).
+        #[arg(long)]
+        limit: Option<usize>,
     },
 }
 
@@ -139,11 +164,18 @@ impl Cli {
             Command::Schema { check } => crate::schema::run(check),
             Command::Daemon { once } => crate::daemon::run(once),
             Command::Hook { action } => match action {
-                HookAction::Install { platform } => crate::hook::install(&platform),
+                HookAction::Install { platform, inject } => {
+                    crate::hook::install(&platform, inject.as_deref())
+                },
             },
             Command::Query { q, json, streams, k } => crate::query::run(&q, json, &streams, k),
             Command::Index { action } => match action {
                 IndexAction::Rebuild => crate::index::rebuild(),
+            },
+            Command::Inject { action } => match action {
+                InjectAction::Log { session, limit } => {
+                    crate::inject::log(session.as_deref(), limit)
+                },
             },
         }
     }
