@@ -304,6 +304,19 @@ mod tests {
         assert!(hits[0].streams_matched.contains(&Stream::Bm25));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn refuse_symlinked_recall_db() {
+        let tmp = TempDir::new().unwrap();
+        let real = tmp.path().join("real.db");
+        std::fs::write(&real, b"").unwrap();
+        let link = tmp.path().join("recall.db");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let err = Bm25Backend::open(&link).expect_err("symlinked recall.db must be rejected");
+        let msg = format!("{err}");
+        assert!(msg.contains("symlink"), "expected symlink rejection diagnostic, got: {msg}");
+    }
+
     #[tokio::test]
     async fn upsert_replaces_prior_doc() {
         let tmp = TempDir::new().unwrap();

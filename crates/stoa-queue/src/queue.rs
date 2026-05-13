@@ -269,11 +269,43 @@ impl Queue {
 }
 
 fn open_connection(path: &Path) -> Result<Connection> {
+    refuse_symlink(path)?;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
         | OpenFlags::SQLITE_OPEN_CREATE
-        | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX
+        | OpenFlags::SQLITE_OPEN_NOFOLLOW;
     let conn = Connection::open_with_flags(path, flags)?;
     Ok(conn)
+}
+
+/// Defense-in-depth on top of `SQLITE_OPEN_NOFOLLOW`: refuse the path if
+/// it (or its parent) is a symlink, so a hostile `.stoa/queue.db ->
+/// /tmp/elsewhere` cannot redirect WAL/SHM siblings into the link
+/// target on builds that ignore the flag.
+fn refuse_symlink(path: &Path) -> Result<()> {
+    if let Ok(meta) = std::fs::symlink_metadata(path)
+        && meta.file_type().is_symlink()
+    {
+        return Err(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+            Some(format!("queue.db `{}` is a symlink — refusing to open", path.display())),
+        )
+        .into());
+    }
+    if let Some(parent) = path.parent()
+        && let Ok(meta) = std::fs::symlink_metadata(parent)
+        && meta.file_type().is_symlink()
+    {
+        return Err(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+            Some(format!(
+                "queue.db parent `{}` is a symlink — refusing to open",
+                parent.display(),
+            )),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 /// Run `f` while holding the connection lock; drop the guard before returning

@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::bm25::Bm25Error;
 
@@ -57,14 +57,51 @@ PRAGMA temp_store = MEMORY;";
 ///
 /// Creates the parent directory if missing. Idempotent: repeated calls on
 /// an already-current DB are a no-op.
+///
+/// The connection is opened with `SQLITE_OPEN_NOFOLLOW` (`SQLite` >= 3.31)
+/// so a hostile `.stoa/recall.db -> /tmp/elsewhere` symlink fails fast
+/// instead of writing WAL/SHM siblings into the link target.
 pub fn ensure_schema(path: &Path) -> Result<Connection, Bm25Error> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let conn = Connection::open(path)?;
+    refuse_symlink(path)?;
+    let conn = Connection::open_with_flags(path, recall_db_open_flags())?;
     conn.execute_batch(PRAGMAS)?;
     apply_schema(&conn)?;
     Ok(conn)
+}
+
+/// Flags shared by every callsite opening `recall.db`.
+pub(crate) fn recall_db_open_flags() -> OpenFlags {
+    OpenFlags::SQLITE_OPEN_READ_WRITE
+        | OpenFlags::SQLITE_OPEN_CREATE
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX
+        | OpenFlags::SQLITE_OPEN_NOFOLLOW
+}
+
+/// Belt-and-braces check on top of `SQLITE_OPEN_NOFOLLOW`: refuse if the
+/// file or its parent directory is a symlink. Older `SQLite` builds that
+/// silently ignore the flag still get caught here.
+pub(crate) fn refuse_symlink(path: &Path) -> Result<(), Bm25Error> {
+    if let Ok(meta) = std::fs::symlink_metadata(path)
+        && meta.file_type().is_symlink()
+    {
+        return Err(Bm25Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("recall.db `{}` is a symlink — refusing to open", path.display()),
+        )));
+    }
+    if let Some(parent) = path.parent()
+        && let Ok(meta) = std::fs::symlink_metadata(parent)
+        && meta.file_type().is_symlink()
+    {
+        return Err(Bm25Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("recall.db parent `{}` is a symlink — refusing to open", parent.display()),
+        )));
+    }
+    Ok(())
 }
 
 fn apply_schema(conn: &Connection) -> Result<(), Bm25Error> {
