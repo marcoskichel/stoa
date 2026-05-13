@@ -9,11 +9,14 @@
 //!   waits for them to finish their current row.
 
 mod loop_runner;
+mod recall_drain;
+mod watch;
 
 use std::path::Path;
 
 use anyhow::Context;
 use stoa_capture::WorkerConfig;
+use stoa_queue::Queue;
 
 use crate::workspace::Workspace;
 
@@ -26,11 +29,31 @@ pub(crate) fn run(once: bool) -> anyhow::Result<()> {
     let cfg = worker_config(&ws);
     ensure_dirs(&cfg)?;
     if once {
-        let _ignored = stoa_capture::drain_once(&cfg).context("draining capture queue")?;
-        Ok(())
+        run_once(&ws, &cfg)
     } else {
-        loop_runner::serve(cfg, DEFAULT_WORKERS)
+        run_loop(&ws, cfg)
     }
+}
+
+fn run_once(ws: &Workspace, cfg: &WorkerConfig) -> anyhow::Result<()> {
+    let _ignored = stoa_capture::drain_once(cfg).context("draining capture queue")?;
+    let queue = Queue::open(&cfg.queue_path).context("opening queue for recall drain")?;
+    let mut processed_any = false;
+    while recall_drain::drain_one(&ws.root, &queue).context("draining recall queue")? {
+        processed_any = true;
+    }
+    if processed_any {
+        crate::index::reindex_via_full_rebuild(&ws.root)
+            .context("rescanning wiki + sessions for out-of-date pages")?;
+    }
+    Ok(())
+}
+
+fn run_loop(ws: &Workspace, cfg: WorkerConfig) -> anyhow::Result<()> {
+    let watcher = watch::spawn_watcher(&ws.root, &cfg.queue_path)?;
+    let result = loop_runner::serve(cfg, DEFAULT_WORKERS);
+    drop(watcher);
+    result
 }
 
 fn worker_config(ws: &Workspace) -> WorkerConfig {

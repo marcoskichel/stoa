@@ -38,17 +38,30 @@ const INDEX_MD_HEADER: &str =
     "# Wiki index\n\nAuto-generated catalog. Re-run `stoa write` to refresh.\n";
 
 /// Run `stoa init` in the current working directory.
-pub(crate) fn run() -> anyhow::Result<()> {
+///
+/// `no_embeddings = true` is the BM25-only fast path: the FTS5 + KG
+/// `recall.db` is still created (cheap; <100 ms) but the Python venv +
+/// `ChromaDB` store at `.stoa/vectors/` are not touched. Per ROADMAP M4
+/// the cold-start budget is <5 s on a fresh machine.
+pub(crate) fn run(no_embeddings: bool) -> anyhow::Result<()> {
     let cwd = std::env::current_dir().context("reading current dir")?;
-    scaffold(&cwd)
+    scaffold(&cwd, no_embeddings)
 }
 
-fn scaffold(root: &Path) -> anyhow::Result<()> {
+fn scaffold(root: &Path, no_embeddings: bool) -> anyhow::Result<()> {
     create_dirs(root)?;
     write_if_missing(&root.join("STOA.md"), DEFAULT_STOA_MD)?;
     write_if_missing(&root.join(".gitignore"), GITIGNORE_BODY)?;
     write_if_missing(&root.join("wiki/index.md"), INDEX_MD_HEADER)?;
     append_init_event(&root.join("wiki/log.md"))?;
+    let recall_db = root.join(".stoa").join("recall.db");
+    let _conn = stoa_recall_local_chroma_sqlite::ensure_schema(&recall_db)
+        .map_err(|e| anyhow::anyhow!("provisioning `recall.db`: {e}"))?;
+    if !no_embeddings {
+        let vectors_dir = root.join(".stoa").join("vectors");
+        fs::create_dir_all(&vectors_dir)
+            .with_context(|| format!("creating `{}`", vectors_dir.display()))?;
+    }
     Ok(())
 }
 

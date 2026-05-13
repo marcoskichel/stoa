@@ -51,10 +51,6 @@ pub(crate) enum BackendKind {
 
 impl BackendKind {
     /// Canonical string identifier used in result filenames.
-    #[expect(
-        dead_code,
-        reason = "called by build_params when adapters emit BenchmarkResult in M4"
-    )]
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Self::LocalChromaSqlite => "local-chroma-sqlite",

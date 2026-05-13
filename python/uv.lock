@@ -9,6 +9,7 @@ members = [
     "stoa-embed",
     "stoa-harvest",
     "stoa-py",
+    "stoa-recall",
     "stoa-shared",
 ]
 
@@ -509,6 +510,7 @@ dependencies = [
     { name = "stoa-crystallize" },
     { name = "stoa-embed" },
     { name = "stoa-harvest" },
+    { name = "stoa-recall" },
     { name = "stoa-shared" },
 ]
 
@@ -526,6 +528,7 @@ requires-dist = [
     { name = "stoa-crystallize", editable = "packages/stoa-crystallize" },
     { name = "stoa-embed", editable = "packages/stoa-embed" },
     { name = "stoa-harvest", editable = "packages/stoa-harvest" },
+    { name = "stoa-recall", editable = "packages/stoa-recall" },
     { name = "stoa-shared", editable = "packages/stoa-shared" },
 ]
 
@@ -535,6 +538,21 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "ruff", specifier = ">=0.7" },
+]
+
+[[package]]
+name = "stoa-recall"
+version = "0.1.0"
+source = { editable = "packages/stoa-recall" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "stoa-shared" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "stoa-shared", editable = "packages/stoa-shared" },
 ]
 
 [[package]]

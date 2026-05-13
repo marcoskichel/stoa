@@ -17,9 +17,10 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
-    match run::run(&cli) {
+    match run::run(&cli).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             report_error(&e);

@@ -1,42 +1,66 @@
+//! Zero-recall control backend — always returns empty results.
+
 use std::path::Path;
 
-use stoa_recall::{Hit, RecallBackend, RecallError, SearchParams};
+use async_trait::async_trait;
+use stoa_recall::{Filters, Hit, RecallBackend, RecallError, StreamSet};
 
 /// Zero-recall control backend.
 ///
-/// Always returns an empty hit list. Used as the control arm for computing
-/// "delta vs no recall at the same backbone" — the headline metric that
-/// justifies Stoa's existence.
+/// Implements [`RecallBackend`] as a no-op: every read returns an empty
+/// hit list, every write succeeds without storing anything. Used as the
+/// control arm for "delta vs no recall at the same backbone" comparisons.
 pub(crate) struct NoopBackend;
 
+#[async_trait]
 impl RecallBackend for NoopBackend {
-    fn search(&self, _params: &SearchParams) -> Result<Vec<Hit>, RecallError> {
+    async fn index_page(
+        &self,
+        _page_id: &str,
+        _content: &str,
+        _source_path: &str,
+        _metadata: &serde_json::Value,
+    ) -> Result<(), RecallError> {
+        Ok(())
+    }
+
+    async fn index_session(
+        &self,
+        _session_id: &str,
+        _jsonl_path: &Path,
+    ) -> Result<(), RecallError> {
+        Ok(())
+    }
+
+    async fn remove(&self, _doc_id: &str) -> Result<(), RecallError> {
+        Ok(())
+    }
+
+    async fn search(
+        &self,
+        _query: &str,
+        _k: usize,
+        _filters: &Filters,
+        _streams: StreamSet,
+    ) -> Result<Vec<Hit>, RecallError> {
         Ok(vec![])
     }
 
-    fn index_path(&self, _path: &Path) -> Result<(), RecallError> {
-        Ok(())
-    }
-
-    fn rebuild(&self) -> Result<(), RecallError> {
-        Ok(())
+    async fn health_check(&self) -> Result<serde_json::Value, RecallError> {
+        Ok(serde_json::json!({"backend": "noop"}))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stoa_recall::SearchParams;
 
-    #[test]
-    fn noop_search_returns_empty() {
+    #[tokio::test]
+    async fn noop_search_returns_empty() {
         let backend = NoopBackend;
-        let params = SearchParams {
-            query: "anything".to_owned(),
-            k: 10,
-            streams: vec![],
-        };
-        let result = backend.search(&params);
+        let result = backend
+            .search("anything", 10, &Filters::default(), StreamSet::all())
+            .await;
         assert!(result.is_ok(), "noop backend must not fail");
         assert!(result.unwrap_or_default().is_empty());
     }

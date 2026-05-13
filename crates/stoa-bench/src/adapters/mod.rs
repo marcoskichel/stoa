@@ -1,3 +1,5 @@
+//! Per-benchmark adapter implementations.
+
 mod agent_leak;
 mod beam;
 mod longmemeval;
@@ -18,17 +20,13 @@ use crate::{
     result::BenchmarkResult,
 };
 
-/// Shared stub used by all pre-M4 adapters.
+/// Shared stub used by adapters that don't yet have a real implementation.
 ///
 /// Validates the smoke fixture when `params.smoke` is set, then returns
-/// `BackendNotReady`. Adapters swap this for real logic once
-/// `LocalChromaSqliteBackend` lands in M4.
-///
-/// Private items in a module are accessible to all its child modules, so each
-/// adapter in this directory can call this via `super::run_stub`.
-fn run_stub(name: &str, params: &RunParams) -> Result<BenchmarkResult, BenchError> {
+/// `BackendNotReady`. Replaced by real logic adapter-by-adapter.
+async fn run_stub(name: &str, params: &RunParams) -> Result<BenchmarkResult, BenchError> {
     if params.smoke {
-        load_smoke_fixture(&params.corpus_dir, name)?;
+        let _value = load_smoke_fixture(&params.corpus_dir, name)?;
     }
     Err(BenchError::BackendNotReady)
 }
