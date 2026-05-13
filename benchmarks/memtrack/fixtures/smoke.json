@@ -1,0 +1,50 @@
+{
+  "scenarios": [
+    {
+      "scenario_id": "smoke-m0",
+      "platform": "slack",
+      "events": [
+        {"ts": "2024-03-01T10:00:00Z", "type": "message", "content": "Deploy to prod scheduled for Friday at 3pm."}
+      ],
+      "question": "When is the prod deploy?",
+      "answer": "Friday at 3pm"
+    },
+    {
+      "scenario_id": "smoke-m1",
+      "platform": "linear",
+      "events": [
+        {"ts": "2024-03-01T11:00:00Z", "type": "issue_update", "content": "Issue LIN-42 closed as fixed."}
+      ],
+      "question": "What is the status of LIN-42?",
+      "answer": "closed as fixed"
+    },
+    {
+      "scenario_id": "smoke-m2",
+      "platform": "git",
+      "events": [
+        {"ts": "2024-03-01T12:00:00Z", "type": "commit", "content": "feat(auth): add OAuth2 login flow"}
+      ],
+      "question": "What did the last commit do?",
+      "answer": "added OAuth2 login flow"
+    },
+    {
+      "scenario_id": "smoke-m3",
+      "platform": "slack",
+      "events": [
+        {"ts": "2024-03-01T09:00:00Z", "type": "message", "content": "Team standup at 9am tomorrow."},
+        {"ts": "2024-03-01T14:00:00Z", "type": "message", "content": "Standup moved to 10am tomorrow."}
+      ],
+      "question": "What time is tomorrow's standup?",
+      "answer": "10am"
+    },
+    {
+      "scenario_id": "smoke-m4",
+      "platform": "linear",
+      "events": [
+        {"ts": "2024-03-01T08:00:00Z", "type": "issue_created", "content": "Bug: login fails on Safari mobile browsers."}
+      ],
+      "question": "What bug was reported?",
+      "answer": "login fails on Safari mobile browsers"
+    }
+  ]
+}

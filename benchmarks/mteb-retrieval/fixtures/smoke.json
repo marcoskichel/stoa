@@ -1,0 +1,16 @@
+{
+  "queries": [
+    {"query_id": "smoke-q0", "query": "information retrieval benchmarks comparison", "relevant_doc_ids": ["d0", "d2"]},
+    {"query_id": "smoke-q1", "query": "neural text embedding models", "relevant_doc_ids": ["d1"]},
+    {"query_id": "smoke-q2", "query": "BM25 sparse retrieval algorithm", "relevant_doc_ids": ["d0"]},
+    {"query_id": "smoke-q3", "query": "dense passage retrieval semantic search", "relevant_doc_ids": ["d1", "d3"]},
+    {"query_id": "smoke-q4", "query": "BEIR benchmark evaluation methodology", "relevant_doc_ids": ["d2", "d4"]}
+  ],
+  "documents": [
+    {"doc_id": "d0", "text": "BM25 is a classical sparse retrieval algorithm that ranks documents by term frequency and inverse document frequency."},
+    {"doc_id": "d1", "text": "Dense passage retrieval uses neural text embeddings to represent queries and documents in a shared vector space for semantic search."},
+    {"doc_id": "d2", "text": "BEIR is a heterogeneous benchmark for evaluating zero-shot information retrieval across diverse domains."},
+    {"doc_id": "d3", "text": "Dense retrieval methods trained with contrastive learning outperform sparse methods on many semantic similarity tasks."},
+    {"doc_id": "d4", "text": "The MTEB benchmark evaluates text embedding models across classification, clustering, retrieval, and semantic textual similarity tasks."}
+  ]
+}

@@ -12,5 +12,13 @@ authors.workspace = true
 name = "stoa-bench"
 path = "src/main.rs"
 
+[dependencies]
+stoa-recall = { path = "../stoa-recall" }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+
 [lints]
 workspace = true

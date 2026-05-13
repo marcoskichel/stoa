@@ -1213,6 +1213,14 @@ dependencies = [
 [[package]]
 name = "stoa-bench"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "serde",
+ "serde_json",
+ "stoa-recall",
+ "thiserror",
+]
 
 [[package]]
 name = "stoa-capture"
@@ -1296,6 +1304,10 @@ dependencies = [
 [[package]]
 name = "stoa-recall"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror",
+]
 
 [[package]]
 name = "stoa-recall-local-chroma-sqlite"

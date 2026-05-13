@@ -5,8 +5,33 @@
 //! for the full plan; per-benchmark intent + cost lives in
 //! `benchmarks/<name>/README.md`.
 
+mod adapter;
+mod adapters;
+mod backends;
+mod cli;
+mod error;
+mod result;
+mod run;
+
 use std::process::ExitCode;
 
+use clap::Parser;
+
 fn main() -> ExitCode {
-    ExitCode::SUCCESS
+    let cli = cli::Cli::parse();
+    match run::run(&cli) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            report_error(&e);
+            ExitCode::FAILURE
+        },
+    }
+}
+
+#[expect(
+    clippy::print_stderr,
+    reason = "CLI binary — errors must reach the terminal"
+)]
+fn report_error(e: &error::BenchError) {
+    eprintln!("stoa-bench: {e}");
 }

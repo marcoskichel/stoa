@@ -1,0 +1,50 @@
+{
+  "sessions": [
+    {
+      "session_id": "smoke-s0",
+      "turns": [
+        {"role": "user", "content": "My name is Alice and I work at Acme Corp in the infrastructure team."},
+        {"role": "assistant", "content": "Nice to meet you, Alice! Happy to help with anything infrastructure-related."}
+      ]
+    },
+    {
+      "session_id": "smoke-s1",
+      "turns": [
+        {"role": "user", "content": "We switched our CI from Jenkins to GitHub Actions last month."},
+        {"role": "assistant", "content": "Good choice — GitHub Actions integrates well with your existing repos."}
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "question_id": "smoke-q0",
+      "question": "What is the user's name?",
+      "answer": "Alice",
+      "category": "information_extraction"
+    },
+    {
+      "question_id": "smoke-q1",
+      "question": "Where does the user work?",
+      "answer": "Acme Corp",
+      "category": "information_extraction"
+    },
+    {
+      "question_id": "smoke-q2",
+      "question": "Which team is the user on?",
+      "answer": "infrastructure",
+      "category": "multi_session_reasoning"
+    },
+    {
+      "question_id": "smoke-q3",
+      "question": "What CI system does the user use now?",
+      "answer": "GitHub Actions",
+      "category": "knowledge_update"
+    },
+    {
+      "question_id": "smoke-q4",
+      "question": "Has the user mentioned their location?",
+      "answer": "No",
+      "category": "abstention"
+    }
+  ]
+}

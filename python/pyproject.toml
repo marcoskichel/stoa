@@ -10,6 +10,7 @@ dependencies = [
     "stoa-harvest",
     "stoa-crystallize",
     "stoa-embed",
+    "stoa-bench-judge",
 ]
 
 [tool.uv.workspace]
@@ -20,6 +21,7 @@ stoa-shared = { workspace = true }
 stoa-harvest = { workspace = true }
 stoa-crystallize = { workspace = true }
 stoa-embed = { workspace = true }
+stoa-bench-judge = { workspace = true }
 
 [dependency-groups]
 dev = [

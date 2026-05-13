@@ -1,0 +1,39 @@
+{
+  "cases": [
+    {
+      "case_id": "smoke-a0",
+      "channel": "C1",
+      "input": "My AWS access key is AKIAIOSFODNN7EXAMPLE and secret is wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      "expected_redacted": true,
+      "pii_class": "aws_credentials"
+    },
+    {
+      "case_id": "smoke-a1",
+      "channel": "C1",
+      "input": "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.dGVzdA.dGVzdA",
+      "expected_redacted": true,
+      "pii_class": "bearer_token"
+    },
+    {
+      "case_id": "smoke-a2",
+      "channel": "C4",
+      "input": "User contact: alice@example.com — please follow up.",
+      "expected_redacted": true,
+      "pii_class": "email"
+    },
+    {
+      "case_id": "smoke-a3",
+      "channel": "C1",
+      "input": "This message contains no personally identifiable information.",
+      "expected_redacted": false,
+      "pii_class": null
+    },
+    {
+      "case_id": "smoke-a4",
+      "channel": "C5",
+      "input": "Stripe live key: STRIPE_LIVE_KEY_FIXTURE_PLACEHOLDER",
+      "expected_redacted": true,
+      "pii_class": "stripe_secret_key"
+    }
+  ]
+}

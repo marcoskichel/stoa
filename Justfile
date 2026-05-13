@@ -89,8 +89,25 @@ machete:
 # Benchmarks
 # --------------------------------------------------------------------------
 
+# Full v0.1 suite — requires M4 (LocalChromaSqliteBackend) to produce results.
 bench:
     cargo run -p stoa-bench --release -- --backend local-chroma-sqlite
+
+# Smoke run: validates fixtures exist and parse; does NOT require a live backend.
+bench-smoke:
+    cargo run -p stoa-bench --release -- --backend local-chroma-sqlite --smoke
+
+# Download all v0.1 benchmark corpora into benchmarks/corpus/.
+# Requires: huggingface-cli (pip install huggingface_hub[cli])
+# MEMTRACK, BEAM, AgentLeak handles pending confirmation — see FIXME in each script.
+bench-download-corpus:
+    bash benchmarks/corpus/longmemeval.sh
+    bash benchmarks/corpus/memory-agent-bench.sh
+    bash benchmarks/corpus/mteb-retrieval.sh
+
+# Run a single benchmark by name (e.g. just bench-run longmemeval).
+bench-run name:
+    cargo run -p stoa-bench --release -- --backend local-chroma-sqlite --bench {{name}}
 
 # --------------------------------------------------------------------------
 # Install for local dev

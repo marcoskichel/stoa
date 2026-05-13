@@ -1,5 +1,13 @@
 //! Stoa `RecallBackend` trait + reciprocal rank fusion.
 
+mod backend;
+mod error;
+mod types;
+
+pub use backend::RecallBackend;
+pub use error::RecallError;
+pub use types::{Hit, SearchParams, Stream};
+
 #[cfg(test)]
 mod tests {
     #[test]

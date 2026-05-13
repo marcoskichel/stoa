@@ -1,0 +1,41 @@
+{
+  "tasks": [
+    {
+      "task_id": "smoke-t0",
+      "type": "retrieval",
+      "query": "What is the user's preferred programming language?",
+      "context": "The user mentioned they primarily code in Rust.",
+      "answer": "Rust"
+    },
+    {
+      "task_id": "smoke-t1",
+      "type": "fact_consolidation_sh",
+      "query": "What is the user's name?",
+      "history": [
+        {"content": "Hi, I am Bob."},
+        {"content": "Actually, my name is Robert — Bob is just a nickname."}
+      ],
+      "answer": "Robert (nickname: Bob)"
+    },
+    {
+      "task_id": "smoke-t2",
+      "type": "selective_forgetting",
+      "query": "What was the user's old GitHub handle?",
+      "history": [{"content": "My GitHub handle used to be @old-handle before I changed it."}],
+      "deleted": true,
+      "answer": null
+    },
+    {
+      "task_id": "smoke-t3",
+      "type": "test_time_learning",
+      "query": "New fact: the user now uses Neovim instead of Emacs.",
+      "answer": "acknowledged"
+    },
+    {
+      "task_id": "smoke-t4",
+      "type": "retrieval",
+      "query": "Which editor does the user use?",
+      "answer": "Neovim"
+    }
+  ]
+}
