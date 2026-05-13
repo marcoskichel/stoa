@@ -52,10 +52,6 @@ fn emit_dry_run() {
     println!("recall@10=N/A");
 }
 
-#[expect(
-    clippy::print_stdout,
-    reason = "Benchmark CLI emits progress + summary to stdout by design."
-)]
 fn run_real(args: &Args) -> anyhow::Result<()> {
     let data = args
         .data_path
@@ -68,8 +64,10 @@ fn run_real(args: &Args) -> anyhow::Result<()> {
             data.display(),
         ));
     }
-    println!("LongMemEval real run not implemented in M4 (--dry-run only).");
-    println!("Dataset path: {}", data.display());
-    println!("recall@{}=pending", args.k);
-    Ok(())
+    Err(anyhow::anyhow!(
+        "M5: real `LongMemEval` run not yet wired (only --dry-run works); \
+         dataset present at `{}`, k={} — refusing to claim a PASS",
+        data.display(),
+        args.k,
+    ))
 }
