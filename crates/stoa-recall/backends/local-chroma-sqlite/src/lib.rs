@@ -16,6 +16,7 @@
 
 mod bm25;
 mod ipc;
+mod sanitize;
 mod schema;
 
 pub use bm25::Bm25Backend;

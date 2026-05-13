@@ -21,6 +21,7 @@ use rusqlite::{Connection, params};
 use stoa_recall::{Filters, Hit, RecallBackend, RecallError, Stream, StreamSet};
 use thiserror::Error;
 
+use crate::sanitize::sanitize_query;
 use crate::schema::ensure_schema;
 
 /// Errors emitted by the BM25 backend internals.
@@ -154,22 +155,6 @@ fn row_to_hit(row: &rusqlite::Row<'_>) -> Result<Hit, rusqlite::Error> {
         .metadata
         .insert("kind".to_owned(), serde_json::Value::String(kind));
     Ok(hit)
-}
-
-/// FTS5 special characters: `" * ( ) :` are operators. Wrap each token
-/// in double quotes to force literal interpretation; `"` inside a token
-/// is doubled per the FTS5 quoting rules.
-fn sanitize_query(q: &str) -> String {
-    let trimmed = q.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    let mut parts: Vec<String> = Vec::new();
-    for token in trimmed.split_whitespace() {
-        let cleaned = token.replace('"', "\"\"");
-        parts.push(format!("\"{cleaned}\""));
-    }
-    parts.join(" OR ")
 }
 
 const DELETE_BY_DOC_ID: &str = "DELETE FROM docs WHERE doc_id = ?1;";
