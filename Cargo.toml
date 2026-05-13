@@ -67,7 +67,7 @@ uuid = { version = "1", features = ["v4"] }
 
 # Test stack (dev-only) — see research note in CONTRIBUTING.md
 snapbox = "0.6"
-trycmd = "0.15"
+trycmd = "1.2"
 assert_fs = "1"
 predicates = "3"
 proptest = "1"
