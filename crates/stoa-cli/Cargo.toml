@@ -15,15 +15,21 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 stoa-core = { path = "../stoa-core", version = "0.1.0" }
+stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
+stoa-capture = { path = "../stoa-capture", version = "0.1.0" }
 anyhow = { workspace = true }
 serde_yaml = { workspace = true }
 chrono = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
 snapbox = { workspace = true }
 trycmd = { workspace = true }
 assert_fs = { workspace = true }
 serde_yaml = { workspace = true }
+stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

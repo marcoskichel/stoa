@@ -15,7 +15,7 @@ pub mod validate;
 
 pub use error::{Error, Result, ValidationError};
 pub use frontmatter::Frontmatter;
-pub use id::{Id, PageDir};
+pub use id::{Id, PageDir, SessionId};
 pub use kind::{Kind, Status};
 pub use relationship::{EntityType, Relationship, RelationshipType};
 pub use schema::Schema;

@@ -67,6 +67,30 @@ pub(crate) enum Command {
         #[arg(long)]
         check: bool,
     },
+
+    /// Run the capture daemon (or a single drain cycle with `--once`).
+    Daemon {
+        /// Drain one row and exit instead of running the long-lived loop.
+        #[arg(long)]
+        once: bool,
+    },
+
+    /// Manage Stoa hooks for an agent platform.
+    Hook {
+        #[command(subcommand)]
+        action: HookAction,
+    },
+}
+
+/// `stoa hook ...` sub-subcommands.
+#[derive(Subcommand, Debug)]
+pub(crate) enum HookAction {
+    /// Print the registration snippet for the given platform.
+    Install {
+        /// Target platform (e.g. `claude-code`).
+        #[arg(long)]
+        platform: String,
+    },
 }
 
 impl Cli {
@@ -79,6 +103,10 @@ impl Cli {
                 crate::write::run(&id, frontmatter.as_deref(), body.as_deref())
             },
             Command::Schema { check } => crate::schema::run(check),
+            Command::Daemon { once } => crate::daemon::run(once),
+            Command::Hook { action } => match action {
+                HookAction::Install { platform } => crate::hook::install(&platform),
+            },
         }
     }
 }

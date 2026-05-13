@@ -8,5 +8,18 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[dependencies]
+stoa-core = { path = "../stoa-core", version = "0.1.0" }
+stoa-queue = { path = "../stoa-queue", version = "0.1.0" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+assert_fs = { workspace = true }
+
 [lints]
 workspace = true

@@ -8,5 +8,13 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[dependencies]
+rusqlite = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+assert_fs = { workspace = true }
+
 [lints]
 workspace = true
