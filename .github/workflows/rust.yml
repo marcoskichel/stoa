@@ -26,13 +26,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-${{ matrix.os }}
+          shared-key: rust-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: cargo fmt --check
         run: cargo fmt --all --check
 
-      - name: cargo fetch
-        run: cargo fetch
+      - name: cargo fetch (validate lockfile)
+        run: cargo fetch --locked
 
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --frozen -- -D warnings
@@ -55,7 +55,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-supply-chain
+          shared-key: rust-supply-chain-${{ hashFiles('**/Cargo.lock') }}
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny,cargo-machete

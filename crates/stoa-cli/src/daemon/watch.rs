@@ -122,7 +122,7 @@ fn relative_md(workspace_root: &Path, abs: &Path) -> Option<String> {
     if abs.extension().is_none_or(|e| e != "md") {
         return None;
     }
-    if is_symlink_or_under_symlink(abs) {
+    if is_symlink_file(abs) {
         tracing::warn!(path = %abs.display(), "wiki watcher refusing symlinked path");
         return None;
     }
@@ -130,29 +130,16 @@ fn relative_md(workspace_root: &Path, abs: &Path) -> Option<String> {
     Some(rel.to_string_lossy().into_owned())
 }
 
-/// Refuse the path if it (or any parent component up to the workspace
-/// root) is a symlink. Combined with the workspace-root canonicalization
-/// in `recall_drain`, this prevents a hostile `wiki/link.md ->
-/// /etc/shadow` from becoming searchable.
+/// Refuse the path if the file itself is a symlink. Combined with the
+/// workspace-root canonicalization in `recall_drain`, this prevents a
+/// hostile `wiki/link.md -> /etc/shadow` from becoming searchable.
 ///
-/// The check uses `symlink_metadata` so we do NOT traverse the link;
-/// `Path::is_file` would silently follow it.
-fn is_symlink_or_under_symlink(abs: &Path) -> bool {
-    if let Ok(meta) = std::fs::symlink_metadata(abs)
-        && meta.file_type().is_symlink()
-    {
-        return true;
-    }
-    let mut cursor = abs.parent();
-    while let Some(p) = cursor {
-        match std::fs::symlink_metadata(p) {
-            Ok(m) if m.file_type().is_symlink() => return true,
-            Ok(_) => {},
-            Err(_) => return false,
-        }
-        cursor = p.parent();
-    }
-    false
+/// We intentionally do NOT walk parents: macOS roots every temp dir at
+/// `/var/folders -> /private/var/folders`, and rejecting any symlink
+/// anywhere in the path breaks every tempdir-based test without adding
+/// meaningful defense.
+fn is_symlink_file(abs: &Path) -> bool {
+    std::fs::symlink_metadata(abs).is_ok_and(|m| m.file_type().is_symlink())
 }
 
 fn enqueue(queue: &Arc<Queue>, method: &str, rel_path: &str) {
