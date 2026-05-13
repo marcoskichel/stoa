@@ -41,6 +41,7 @@ benchmarks/spike-m0/**/build-*.log
 # demand by `benchmarks/corpus/<name>.sh`.
 benchmarks/corpus/*/data/
 benchmarks/corpus/*/.version
+benchmarks/corpus/*/.commit
 
 .fastembed_cache/
 

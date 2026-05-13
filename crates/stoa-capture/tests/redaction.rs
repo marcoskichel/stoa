@@ -260,19 +260,26 @@ fn redacts_phone_us_10d_dashed() {
 }
 
 #[test]
-fn redacts_phone_us_7d_short_form() {
+fn phone_pattern_preserves_http_status_pairs() {
     let r = default_redactor();
-    let out = r.redact_line("phone=555-0174");
-    assert!(has_redaction_marker(&out), "7-digit phone not redacted: {out:?}");
-    assert!(!out.contains("555-0174"));
+    let input = "HTTP 404-5230 response from upstream";
+    assert_eq!(r.redact_line(input), input, "HTTP status pairs must not redact");
 }
 
 #[test]
-fn phone_us_7d_preserves_short_alpha_strings() {
+fn phone_pattern_preserves_short_alpha_strings() {
     let r = default_redactor();
     let line = "version=v1.2-rc3 commit=abc-defg";
     let out = r.redact_line(line);
     assert_eq!(out, line, "alpha-suffix tokens must not match phone pattern: {out:?}");
+}
+
+#[test]
+fn phone_pattern_preserves_zip_plus_four() {
+    let r = default_redactor();
+    let line = "mailing address ZIP 10024-1234 New York";
+    let out = r.redact_line(line);
+    assert_eq!(out, line, "ZIP+4 must not match phone pattern: {out:?}");
 }
 
 #[test]
@@ -295,10 +302,23 @@ fn credit_card_preserves_non_card_runs() {
 }
 
 #[test]
+fn credit_card_requires_separators() {
+    let r = default_redactor();
+    let line = "ts=1700000000000000 (16-digit timestamp)";
+    let out = r.redact_line(line);
+    assert!(
+        !has_redaction_kind(&out, "credit-card"),
+        "unseparated 16-digit run must not match credit-card: {out:?}",
+    );
+}
+
+#[test]
 fn redacts_iban_gb_form() {
     let r = default_redactor();
     let out = r.redact_line("IBAN GB29 NWBK 6016 1331 9268 19 noted");
     assert!(has_redaction_kind(&out, "iban"), "IBAN not redacted: {out:?}");
+    assert!(!out.contains("9268 19"), "IBAN tail not redacted: {out:?}");
+    assert!(!out.contains("GB29"), "IBAN head not redacted: {out:?}");
 }
 
 #[test]
@@ -307,6 +327,14 @@ fn iban_preserves_uppercase_words() {
     let line = "USA UK CA DE FR IT NL";
     let out = r.redact_line(line);
     assert_eq!(out, line, "country code abbreviations must not match IBAN: {out:?}");
+}
+
+#[test]
+fn iban_preserves_short_prefix_runs() {
+    let r = default_redactor();
+    let line = "code GB29 NWBK is too short to be an IBAN";
+    let out = r.redact_line(line);
+    assert!(!has_redaction_kind(&out, "iban"), "short prefix must not match IBAN: {out:?}");
 }
 
 #[test]

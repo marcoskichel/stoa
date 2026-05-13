@@ -15,14 +15,20 @@
 # Channel codes per project DOCUMENTATION.md (canonical mapping):
 #   C1 = final_output    C2 = inter_agent     C3 = tool_input
 #   C4 = tool_output     C5 = memory_write    C6 = log           C7 = artifact
+#
+# Reproducibility: GH_REF is pinned to a full commit SHA so the corpus does
+# not drift if upstream rewrites `main`. To bump, run
+#   git ls-remote https://github.com/Privatris/AgentLeak HEAD
+# and replace GH_REF + EXPECTED_VERSION (which embeds the short SHA).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${SCRIPT_DIR}/agent-leak"
 VERSION_FILE="${CACHE_DIR}/.version"
-EXPECTED_VERSION="github-1.0.0"
 GH_REPO="Privatris/AgentLeak"
-GH_REF="main"
+GH_REF="6729179de10e6ee8d346f6467f09ca8b4b97acf7"
+GH_REF_SHORT="${GH_REF:0:7}"
+EXPECTED_VERSION="gh-${GH_REF_SHORT}"
 DATA_PREFIX="agentleak_data/datasets"
 FILES=(
     "scenarios_full_1000.jsonl"
@@ -44,13 +50,15 @@ fi
 
 DEST="${CACHE_DIR}/data"
 mkdir -p "${DEST}"
-echo "agent-leak: downloading from GitHub (${GH_REPO}@${GH_REF})…" >&2
+echo "agent-leak: downloading from GitHub (${GH_REPO}@${GH_REF_SHORT})…" >&2
 for f in "${FILES[@]}"; do
     url="https://raw.githubusercontent.com/${GH_REPO}/${GH_REF}/${DATA_PREFIX}/${f}"
     echo "  • ${f}" >&2
     curl --fail --silent --show-error --location \
+        --proto '=https' --proto-redir '=https' \
         -o "${DEST}/${f}" \
         "${url}"
 done
 echo "${EXPECTED_VERSION}" > "${VERSION_FILE}"
-echo "agent-leak: done" >&2
+echo "${GH_REF}" > "${CACHE_DIR}/.commit"
+echo "agent-leak: done (commit ${GH_REF_SHORT})" >&2

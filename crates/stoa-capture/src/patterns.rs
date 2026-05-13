@@ -31,6 +31,38 @@ pub(crate) struct Pattern {
 /// 4. Network identifiers (IPv4, MAC address).
 /// 5. `AgentLeak` synthetic-PII canary tokens (placed last so structured PII
 ///    is preferred when a canary happens to look like one).
+///
+/// Per-entry intent (one line each):
+/// - `aws`: `AKIA|ASIA|AROA|AIDA|ANPA|ANVA|AGPA` + 16 base32 chars.
+/// - `anthropic`: `sk-ant-(api|sid|admin)<digits>-<32..200 url-safe>`.
+/// - `github-pat`: `ghp_` + 36+ base62 chars.
+/// - `github-oauth`: `gho_` + 36+ base62 chars.
+/// - `github-app`: `ghu_` or `ghs_` + 36+ base62 chars.
+/// - `github-refresh`: `ghr_` + 36+ base62 chars.
+/// - `gitlab`: `glpat-` + 20+ url-safe chars.
+/// - `slack`: `xox[abprs]-` + 10+ chars.
+/// - `stripe-live` / `stripe-test`: `sk_(live|test)_` + 24+ base62 chars.
+/// - `stripe-restricted`: `rk_(live|test)_` + 24+ base62 chars.
+/// - `jwt`: three base64url chunks separated by `.`, each ≥10 chars.
+/// - `openai`: `sk-(proj|svcacct|admin)-` + 20+ url-safe chars.
+/// - `bearer`: case-insensitive `Bearer <token>` with 20+ chars of body.
+/// - `email`: RFC-5322-ish local-part `@` domain with TLD ≥2.
+/// - `path-{ssh,aws,gnupg}`: `~/.<store>` or `<...>/.<store>/<file>`.
+/// - `ssn-us`: `XXX-XX-XXXX` (strict 3-2-4 hyphen layout).
+/// - `phone-us-10d`: 10-digit US phone with optional area parens and
+///   `-`, ` `, or `.` separators; word-boundary anchored. The previous
+///   7-digit variant (`XXX-XXXX`) was removed because it over-matched
+///   HTTP-style `404-5230`, ZIP+4 fragments, and version strings.
+/// - `credit-card`: 16-digit PAN with mandatory `-` or space between
+///   every group; unseparated 16-digit runs are skipped.
+/// - `iban`: ISO 3166 alpha-2 + 2 check digits + 3..7 groups of four
+///   alphanumerics + an optional trailing 1..3-char partial group.
+/// - `ipv4`: dotted-decimal with strict per-octet 0..=255 ranges so
+///   version strings like `1.2.3` do not match.
+/// - `mac-address`: six hex pairs separated by `:` or `-`,
+///   case-insensitive.
+/// - `canary-token`: `AgentLeak`'s `CANARY_<KIND>_<ID>` shape; placed
+///   last so structured PII rules win on overlap.
 pub(crate) const DEFAULTS: &[Pattern] = &[
     Pattern {
         kind: "aws",
@@ -104,57 +136,30 @@ pub(crate) const DEFAULTS: &[Pattern] = &[
         kind: "path-gnupg",
         regex: r#"(?:[A-Za-z]?[/\\][^\s"',]*[/\\]|~[/\\])\.gnupg(?:[/\\][^\s"',]+)?"#,
     },
-    // NOTE: `ssn-us` — US Social Security Number `XXX-XX-XXXX`. The strict
-    // NOTE: 3-2-4 hyphen layout makes false-positives on phone numbers
-    // NOTE: (3-4 or 3-3-4) impossible without re-ordering rules.
     Pattern {
         kind: "ssn-us",
         regex: r"\b\d{3}-\d{2}-\d{4}\b",
     },
-    // NOTE: `phone-us-10d` — 10-digit US phone with optional area parens
-    // NOTE: and `-`, ` `, or `.` separators. Word-boundary anchored so it
-    // NOTE: does not chew through unrelated digit runs.
     Pattern {
         kind: "phone-us-10d",
         regex: r"\b\(?\d{3}\)?[\s\.\-]\d{3}[\s\.\-]\d{4}\b",
     },
-    // NOTE: `phone-us-7d` — 7-digit local form `XXX-XXXX` used in synthetic
-    // NOTE: test fixtures (`555-0174` in AgentLeak). After the 10-digit rule
-    // NOTE: so the longer match wins on overlap.
-    Pattern {
-        kind: "phone-us-7d",
-        regex: r"\b\d{3}-\d{4}\b",
-    },
-    // NOTE: `credit-card` — 16-digit PAN in the canonical `XXXX-XXXX-XXXX-XXXX`
-    // NOTE: form (with `-`, space, or no separator). 13/19-digit Amex/Maestro
-    // NOTE: variants are deliberately excluded to keep false-positives low.
     Pattern {
         kind: "credit-card",
-        regex: r"\b(?:\d{4}[\s\-]?){3}\d{4}\b",
+        regex: r"\b\d{4}[\s\-]\d{4}[\s\-]\d{4}[\s\-]\d{4}\b",
     },
-    // NOTE: `iban` — country code (2 letters) + check digits (2) + 1-7 groups
-    // NOTE: of four alphanumerics (with optional spaces between groups).
     Pattern {
         kind: "iban",
-        regex: r"\b[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]{4}){1,7}\b",
+        regex: r"\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){3,7}(?:\s?[A-Z0-9]{1,3})?\b",
     },
-    // NOTE: `ipv4` — dotted-decimal with strict per-octet 0..=255 ranges so
-    // NOTE: version strings like `1.2.3` do not trigger a false positive.
     Pattern {
         kind: "ipv4",
         regex: r"\b(?:25[0-5]|2[0-4]\d|1?\d{1,2})(?:\.(?:25[0-5]|2[0-4]\d|1?\d{1,2})){3}\b",
     },
-    // NOTE: `mac-address` — six hex pairs separated by `:` or `-`,
-    // NOTE: case-insensitive so both `00:1B:44:11:3A:B7` and
-    // NOTE: `00-1b-44-11-3a-b7` match without a second rule.
     Pattern {
         kind: "mac-address",
         regex: r"(?i)\b(?:[0-9A-F]{2}[:\-]){5}[0-9A-F]{2}\b",
     },
-    // NOTE: `canary-token` — AgentLeak's synthetic-PII shape
-    // NOTE: `CANARY_<KIND>_<ID>` (e.g. `CANARY_SSN_ZVR5XO4K`). Placed last so
-    // NOTE: structured PII rules still get the canonical label when they
-    // NOTE: happen to overlap.
     Pattern {
         kind: "canary-token",
         regex: r"\bCANARY_[A-Z_]+_[A-Z0-9]+\b",
