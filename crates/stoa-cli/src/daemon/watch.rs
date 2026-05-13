@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use anyhow::{Context, anyhow};
 use notify::{EventKind, RecursiveMode};
-use notify_debouncer_full::{DebouncedEvent, Debouncer, NoCache, new_debouncer};
+use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
 use stoa_queue::Queue;
 
 const DEBOUNCE_WINDOW: Duration = Duration::from_secs(2);
@@ -29,7 +29,7 @@ const DEBOUNCE_WINDOW: Duration = Duration::from_secs(2);
 pub(crate) fn spawn_watcher(
     workspace_root: &Path,
     queue_path: &Path,
-) -> anyhow::Result<Debouncer<notify::RecommendedWatcher, NoCache>> {
+) -> anyhow::Result<Debouncer<notify::RecommendedWatcher, RecommendedCache>> {
     let wiki_dir = workspace_root.join("wiki");
     if !wiki_dir.is_dir() {
         std::fs::create_dir_all(&wiki_dir)
