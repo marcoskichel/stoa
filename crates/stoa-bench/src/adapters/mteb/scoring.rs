@@ -10,6 +10,11 @@ use std::collections::HashMap;
 pub(super) const K_VALUES: [usize; 3] = [1, 10, 100];
 /// Cut-off for the primary NDCG metric.
 pub(super) const NDCG_K: usize = 10;
+/// Top-`k` ceiling requested from the backend per query.
+///
+/// Chosen to dominate every value in [`K_VALUES`] so recall@k for any
+/// listed cut-off can be computed from a single search call.
+pub(super) const TOP_K: usize = 100;
 
 /// `recall@k` — fraction of relevant docs (qrel > 0) recovered in the top-`k`.
 ///
@@ -25,7 +30,7 @@ pub(super) fn recall_at_k(retrieved: &[String], qrels: &HashMap<String, u32>, k:
         .take(k)
         .filter(|did| qrels.get(*did).copied().unwrap_or(0) > 0)
         .count();
-    precision_safe_div(hits, relevant)
+    as_f64(hits) / as_f64(relevant)
 }
 
 /// Normalised discounted cumulative gain at rank `k` using graded relevance.
@@ -59,10 +64,15 @@ fn log2_rank(rank: usize) -> f64 {
     ((rank + 2) as f64).log2()
 }
 
+/// Cast `usize` to `f64` for metric arithmetic.
+///
+/// Counts here are bounded by the BEIR corpus size (well under 2^52), so
+/// the precision-loss warning is irrelevant for the values this adapter
+/// actually produces.
 #[expect(
     clippy::cast_precision_loss,
-    reason = "hit + total counts bounded by corpus size; well under 2^52"
+    reason = "counts bounded by corpus size; well under 2^52"
 )]
-pub(super) fn precision_safe_div(num: usize, denom: usize) -> f64 {
-    num as f64 / denom as f64
+pub(super) fn as_f64(n: usize) -> f64 {
+    n as f64
 }
