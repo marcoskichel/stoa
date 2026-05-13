@@ -33,7 +33,6 @@ pub const REQUEST_LANE: &str = "recall.request";
 pub const RESPONSE_LANE: &str = "recall.response";
 
 const SEARCH_EVENT: &str = "recall.search";
-const INDEX_PAGE_EVENT: &str = "recall.index_page";
 const REMOVE_EVENT: &str = "recall.remove";
 const HEALTH_EVENT: &str = "recall.health_check";
 
@@ -175,6 +174,11 @@ fn try_take_response(
 
 #[async_trait]
 impl RecallBackend for IpcBackend {
+    /// `IpcBackend` defers vector / KG ingest to the daemon's
+    /// `recall.request` drainer (see `crates/stoa-cli/src/daemon`). The
+    /// trait method here only updates the BM25 stream so direct
+    /// callers (the workspace indexer, tests) cannot accidentally
+    /// dual-write through both the trait + the queue.
     async fn index_page(
         &self,
         page_id: &str,
@@ -184,20 +188,7 @@ impl RecallBackend for IpcBackend {
     ) -> Result<(), RecallError> {
         self.bm25
             .index_page(page_id, content, source_path, metadata)
-            .await?;
-        let args = serde_json::json!({
-            "page_id": page_id,
-            "content": content,
-            "source_path": source_path,
-            "metadata": metadata,
-        });
-        if let Err(e) = self
-            .round_trip(INDEX_PAGE_EVENT, "index_page", args, DEFAULT_INDEX_TIMEOUT)
             .await
-        {
-            tracing::warn!(error = %e, "python sidecar index_page skipped");
-        }
-        Ok(())
     }
 
     async fn index_session(
