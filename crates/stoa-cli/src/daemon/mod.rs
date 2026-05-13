@@ -38,9 +38,14 @@ pub(crate) fn run(once: bool) -> anyhow::Result<()> {
 fn run_once(ws: &Workspace, cfg: &WorkerConfig) -> anyhow::Result<()> {
     let _ignored = stoa_capture::drain_once(cfg).context("draining capture queue")?;
     let queue = Queue::open(&cfg.queue_path).context("opening queue for recall drain")?;
-    while recall_drain::drain_one(&ws.root, &queue).context("draining recall queue")? {}
-    crate::index::reindex_via_full_rebuild(&ws.root)
-        .context("rescanning wiki + sessions for out-of-date pages")?;
+    let mut processed_any = false;
+    while recall_drain::drain_one(&ws.root, &queue).context("draining recall queue")? {
+        processed_any = true;
+    }
+    if processed_any {
+        crate::index::reindex_via_full_rebuild(&ws.root)
+            .context("rescanning wiki + sessions for out-of-date pages")?;
+    }
     Ok(())
 }
 

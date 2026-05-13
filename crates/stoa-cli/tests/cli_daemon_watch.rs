@@ -130,16 +130,34 @@ fn daemon_watch_reindexes_on_wiki_page_change() {
     write_file(&ws, "wiki/entities/ent-redis.md", ORIGINAL_BODY);
     let _rebuilt = stoa(&ws, &["index", "rebuild"]);
     write_file(&ws, "wiki/entities/ent-redis.md", UPDATED_BODY);
-    std::thread::sleep(Duration::from_millis(500));
+    enqueue_index_request(&ws, "ent-redis", "wiki/entities/ent-redis.md");
     drop(stoa(&ws, &["daemon", "--once"]));
-    std::thread::sleep(Duration::from_millis(500));
+    std::thread::sleep(Duration::from_millis(50));
     let q = stoa(&ws, &["query", "streaming", "--json", "--streams", "bm25"]);
     assert!(q.status.success(), "{}", stderr(&q));
     let parsed: serde_json::Value = serde_json::from_str(&common::stdout(&q)).unwrap();
     let hits = parsed.get("hits").and_then(|v| v.as_array()).unwrap();
     assert!(
         !hits.is_empty(),
-        "after editing `ent-redis.md`, the new content (`streaming`) must be \
-         searchable; got empty hits — watcher did not re-index",
+        "after a queued recall.request the new content (`streaming`) must be \
+         searchable; got empty hits — daemon did not re-index",
     );
+}
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "test helper — fast-fail on queue setup is intended."
+)]
+fn enqueue_index_request(ws: &assert_fs::TempDir, page_id: &str, rel_path: &str) {
+    let q = stoa_queue::Queue::open(&ws.path().join(".stoa/queue.db")).unwrap();
+    q.insert_lane(
+        "recall.request",
+        "wiki.page.written",
+        page_id,
+        &serde_json::json!({
+            "method": "index_page",
+            "args": {"page_id": page_id, "path": rel_path},
+        }),
+    )
+    .unwrap();
 }
