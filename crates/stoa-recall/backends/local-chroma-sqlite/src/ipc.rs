@@ -138,10 +138,7 @@ async fn await_response(
     let mut interval = tokio::time::interval(POLL_INTERVAL);
     loop {
         interval.tick().await;
-        if let Some((row_id, result)) = try_take_response(queue, request_id)? {
-            queue
-                .complete(row_id)
-                .map_err(|e| RecallError::Other(format!("queue complete: {e}")))?;
+        if let Some(result) = try_take_response(queue, request_id)? {
             return Ok(result);
         }
         if start.elapsed() >= timeout {
@@ -152,25 +149,28 @@ async fn await_response(
     }
 }
 
+/// Demux the response lane by `request_id` so concurrent callers do not
+/// block on each other's head-of-lane row.
+///
+/// Uses [`Queue::take_response_for`] which selects + marks-done atomically
+/// inside one `BEGIN IMMEDIATE` transaction — no `peek` + `complete` race
+/// window.
 fn try_take_response(
     queue: &Arc<Queue>,
     request_id: &str,
-) -> Result<Option<(i64, serde_json::Value)>, RecallError> {
-    let Some(row) = queue
-        .peek_first_pending_on_lane(RESPONSE_LANE)
-        .map_err(|e| RecallError::Other(format!("queue peek: {e}")))?
+) -> Result<Option<serde_json::Value>, RecallError> {
+    let Some((_id, payload)) = queue
+        .take_response_for(RESPONSE_LANE, request_id)
+        .map_err(|e| RecallError::Other(format!("queue take_response: {e}")))?
     else {
         return Ok(None);
     };
-    if row.session_id != request_id {
-        return Ok(None);
-    }
-    let parsed: ResponsePayload = serde_json::from_str(&row.payload)?;
+    let parsed: ResponsePayload = serde_json::from_str(&payload)?;
     if !parsed.ok {
         let msg = parsed.error.map_or_else(|| "unknown".into(), |e| e.msg);
         return Err(RecallError::Other(format!("python sidecar: {msg}")));
     }
-    Ok(Some((row.id, parsed.result)))
+    Ok(Some(parsed.result))
 }
 
 #[async_trait]
