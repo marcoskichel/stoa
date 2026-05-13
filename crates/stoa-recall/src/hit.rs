@@ -151,11 +151,34 @@ impl Hit {
     ) -> Self {
         Self {
             doc_id: doc_id.into(),
-            score,
+            score: sanitize_score(score),
             snippet: snippet.into(),
             source_path: source_path.into(),
             streams_matched: vec![stream],
             metadata: Metadata::new(),
         }
+    }
+}
+
+/// Reject NaN by mapping it to `0.0`.
+///
+/// RRF fusion sorts by score; NaN propagates through `partial_cmp` as
+/// `None`, which would scramble the ordering and silently drop the
+/// hit to the bottom of the result list. Callers should never see a
+/// NaN score, so the safest move at the constructor is to clamp it.
+fn sanitize_score(score: f64) -> f64 {
+    if score.is_nan() { 0.0 } else { score }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Hit;
+    use crate::stream::Stream;
+
+    #[test]
+    fn single_stream_clamps_nan_score_to_zero() {
+        let hit = Hit::single_stream("d", f64::NAN, "", "", Stream::Bm25);
+        assert!(hit.score.is_finite(), "NaN must be clamped: {}", hit.score);
+        assert!(hit.score.abs() < f64::EPSILON, "expected 0.0, got {}", hit.score);
     }
 }
