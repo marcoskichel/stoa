@@ -1,0 +1,92 @@
+name: release-plz
+
+on:
+  push:
+    branches: [main]
+
+# release-plz needs to read commit history + write tags + create PRs.
+# Job-level permissions tighten each step beyond what the workflow-level
+# default grants.
+permissions:
+  contents: read
+
+jobs:
+  # Cuts tags + publishes to crates.io + opens GitHub Releases once the
+  # release PR is merged. Runs on every push to main but no-ops unless
+  # the most recent merge was the release PR.
+  release-plz-release:
+    name: release-plz release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    # Serialize release attempts on the same ref so two rapid pushes
+    # cannot trigger parallel `cargo publish` runs against the same
+    # version (tag creation is racy-safe but the publish step is not).
+    concurrency:
+      group: release-plz-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # Fail fast if the publish secret is missing — otherwise release-plz
+      # would create the git tag + GitHub Release first, then crash on
+      # cargo publish, leaving a tagged-but-unpublished workspace.
+      - name: Require CARGO_REGISTRY_TOKEN
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN secret is not set — refusing to tag a release that cannot publish."
+            exit 1
+          fi
+
+      - name: Run release-plz
+        # Pinned to the v0.5.115 commit SHA so a tag-hijack on
+        # release-plz/action cannot escalate via our CARGO_REGISTRY_TOKEN.
+        # Bump alongside `pinned to v0.5.115` below when upgrading.
+        uses: release-plz/action@d89ddd5260792f5ebff817008db8f222bbdd61b4 # v0.5.115
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # Opens/updates the release PR with version bumps + CHANGELOG entries
+  # generated from Conventional Commits since the last tag. Maintainer
+  # reviews the diff, edits prose if needed, then merges to trigger the
+  # release job above.
+  release-plz-pr:
+    name: release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run release-plz
+        # Pinned to the v0.5.115 commit SHA (same as the release job).
+        uses: release-plz/action@d89ddd5260792f5ebff817008db8f222bbdd61b4 # v0.5.115
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
