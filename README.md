@@ -2,11 +2,12 @@
 
 > The painted porch for AI memory.
 
-AI agents have session amnesia — every conversation rediscovers what the previous one already knew.
-Stoa fixes this with a compounding markdown wiki, a hybrid recall layer, and automatic injection back
-into the agent's context, all captured passively through platform hooks without changing how you work.
-The market has shipped fragments (wiki tools without recall, memory tools without synthesis); Stoa is
-the first to combine all three with honest benchmarks and a sustainable OSS posture.
+Andrej Karpathy's [LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+sketched the right shape for an agent's long-term memory: markdown pages, curated by the model itself,
+that compound across sessions. The gist was missing three things — a recall layer, an injection step,
+and a capture path that doesn't depend on the agent remembering to write. Stoa is the working version:
+hybrid recall (vector + BM25 + a small typed knowledge graph), SessionStart injection into Claude Code
+today, Cursor and Codex next.
 
 [![CI](https://github.com/marcoskichel/stoa/actions/workflows/rust.yml/badge.svg)](https://github.com/marcoskichel/stoa/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -53,7 +54,8 @@ Three layers, each independently useful:
 
 > **Pre-v0.1 — early development.**
 >
-> The repo skeleton and capture pipeline are in place. The walking skeleton (v0.1) is in progress.
+> Repo skeleton and capture pipeline are merged. The walking skeleton — CLI + recall + SessionStart
+> injection — is the v0.1 target.
 >
 > | What ships in v0.1 | What comes later |
 > |---|---|
@@ -142,11 +144,10 @@ The OSS core stays MIT and stays useful by itself.
 
 ## Benchmarks
 
-The benchmark suite spec and corpus details are in [benchmarks/README.md](./benchmarks/README.md).
-Results land here when v0.1 ships, pinned to the exact commit they were generated from.
-
-No placeholder numbers. Several projects in this space (mempalace, wiki-recall) published fabricated
-or retroactively stripped numbers; the published suite exists to make that impossible here.
+No numbers yet — they ship with v0.1, pinned to the exact commit that produced them, across the
+[LongMemEval, MemoryAgentBench, MEMTRACK, BEAM, and AgentLeak suites](./benchmarks/README.md).
+Every `RecallBackend` adapter publishes against the same corpus; results that can't be reproduced
+from a clean checkout don't land in the table.
 
 ---
 
