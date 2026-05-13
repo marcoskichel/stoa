@@ -16,9 +16,17 @@ use crate::page::split_page;
 use crate::workspace::Workspace;
 
 /// Run `stoa index rebuild`.
+///
+/// Truncates `docs`, `nodes`, `edges` first so a deleted/renamed page
+/// does not leave a stale row alive in `recall.db`. Per CLAUDE.md the
+/// Layer 1 (`wiki/` + `raw/` + `sessions/`) → Layer 2 (`.stoa/`) split
+/// is non-negotiable: rebuild must be exactly equivalent to "delete
+/// `.stoa/recall.db` and reingest".
 pub(crate) fn rebuild() -> anyhow::Result<()> {
     let ws = Workspace::current().context("locating Stoa workspace")?;
     let bm25 = open_bm25(&ws)?;
+    bm25.truncate_all()
+        .map_err(|e| anyhow!("truncating recall.db: {e}"))?;
     reindex_wiki(&ws, &bm25)?;
     reindex_sessions(&ws, &bm25)?;
     Ok(())

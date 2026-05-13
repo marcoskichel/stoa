@@ -126,6 +126,24 @@ fn index_rebuild_is_idempotent() {
 }
 
 #[test]
+fn index_rebuild_drops_pages_deleted_on_disk() {
+    let ws = workspace();
+    init(&ws);
+    write_file(&ws, "wiki/entities/ent-redis.md", PAGE_REDIS);
+    let _first = stoa(&ws, &["index", "rebuild"]);
+    let before = count_hits(&ws, "redis");
+    assert!(before > 0, "baseline must surface the indexed page");
+    std::fs::remove_file(ws.path().join("wiki/entities/ent-redis.md"))
+        .expect("removing the wiki page on disk");
+    let _second = stoa(&ws, &["index", "rebuild"]);
+    let after = count_hits(&ws, "redis");
+    assert_eq!(
+        after, 0,
+        "ARCHITECTURE §1: a deleted file MUST disappear from `recall.db` after `stoa index rebuild`",
+    );
+}
+
+#[test]
 fn index_rebuild_outside_workspace_exits_non_zero() {
     let ws = workspace();
     let out = stoa(&ws, &["index", "rebuild"]);

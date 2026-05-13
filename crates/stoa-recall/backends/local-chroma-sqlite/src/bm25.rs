@@ -94,6 +94,19 @@ impl Bm25Backend {
         })
     }
 
+    /// Truncate every table the backend owns (`docs`, `nodes`, `edges`)
+    /// inside one transaction so a `stoa index rebuild` cannot leave
+    /// the index torn between deletes and re-inserts.
+    ///
+    /// Required by the Layer 1 / Layer 2 invariant: rebuild must be
+    /// equivalent to "delete `.stoa/recall.db` and reingest".
+    pub fn truncate_all(&self) -> Result<(), Bm25Error> {
+        run_with_conn(&self.conn, |c| {
+            c.execute_batch(TRUNCATE_ALL)?;
+            Ok(())
+        })
+    }
+
     /// Run a BM25 search and return up to `k` hits, best-first.
     ///
     /// Empty queries return an empty `Vec` (FTS5 errors on bare-empty
@@ -160,6 +173,14 @@ fn sanitize_query(q: &str) -> String {
 }
 
 const DELETE_BY_DOC_ID: &str = "DELETE FROM docs WHERE doc_id = ?1;";
+
+/// Wipe every persistent table this backend owns inside one transaction.
+const TRUNCATE_ALL: &str = "\
+BEGIN;
+DELETE FROM docs;
+DELETE FROM nodes;
+DELETE FROM edges;
+COMMIT;";
 
 const INSERT_DOC: &str = "\
 INSERT INTO docs (doc_id, kind, source_path, content) \
