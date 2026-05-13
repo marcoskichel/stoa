@@ -12,6 +12,10 @@ authors.workspace = true
 name = "stoa-bench"
 path = "src/main.rs"
 
+[dependencies]
+clap = { workspace = true }
+anyhow = { workspace = true }
+
 [dev-dependencies]
 snapbox = { workspace = true }
 

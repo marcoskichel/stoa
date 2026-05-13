@@ -1,6 +1,6 @@
-//! E2E quality gate: LongMemEval runner binary surface.
+//! E2E quality gate: `LongMemEval` runner binary surface.
 //!
-//! Spec source: [ROADMAP.md M4 exit criteria] — "LongMemEval reproducible
+//! Spec source: [ROADMAP.md M4 exit criteria] — "`LongMemEval` reproducible
 //! benchmark runner committed to `benchmarks/longmemeval/`" and "Published
 //! `recall@k` numbers in `benchmarks/results/v0.1-local-chroma-sqlite.md`
 //! (k=1, 5, 10)".
@@ -19,7 +19,10 @@ use snapbox::cmd::Command;
 
 #[test]
 fn stoa_bench_help_lists_longmemeval() {
-    let out = Command::new(snapbox::cmd::cargo_bin!("stoa-bench")).args(["--help"]).output().unwrap();
+    let out = Command::new(snapbox::cmd::cargo_bin!("stoa-bench"))
+        .args(["--help"])
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr_text = String::from_utf8_lossy(&out.stderr);
     let body = format!("{stdout}{stderr_text}");
