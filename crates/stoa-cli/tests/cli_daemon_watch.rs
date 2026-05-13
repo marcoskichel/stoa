@@ -73,6 +73,57 @@ fn daemon_once_picks_up_pending_recall_request() {
 }
 
 #[test]
+fn daemon_once_rejects_path_traversal_payload() {
+    let ws = workspace();
+    init(&ws);
+    let q = stoa_queue::Queue::open(&ws.path().join(".stoa/queue.db")).unwrap();
+    q.insert_lane(
+        "recall.request",
+        "wiki.page.written",
+        "evil",
+        &serde_json::json!({
+            "method": "index_page",
+            "args": {"path": "../../../etc/passwd"},
+        }),
+    )
+    .unwrap();
+    drop(q);
+    let out = stoa(&ws, &["daemon", "--once"]);
+    assert!(
+        !out.status.success(),
+        "`stoa daemon --once` must refuse `..`-escaping recall payloads (got success)",
+    );
+    let err = stderr(&out);
+    assert!(
+        err.contains("..") || err.contains("escapes") || err.contains("workspace"),
+        "rejection diagnostic must mention the traversal: stderr={err}",
+    );
+}
+
+#[test]
+fn daemon_once_rejects_absolute_path_payload() {
+    let ws = workspace();
+    init(&ws);
+    let q = stoa_queue::Queue::open(&ws.path().join(".stoa/queue.db")).unwrap();
+    q.insert_lane(
+        "recall.request",
+        "wiki.page.written",
+        "evil-abs",
+        &serde_json::json!({
+            "method": "index_page",
+            "args": {"path": "/etc/passwd"},
+        }),
+    )
+    .unwrap();
+    drop(q);
+    let out = stoa(&ws, &["daemon", "--once"]);
+    assert!(
+        !out.status.success(),
+        "`stoa daemon --once` must refuse absolute-path recall payloads (got success)",
+    );
+}
+
+#[test]
 fn daemon_watch_reindexes_on_wiki_page_change() {
     let ws = workspace();
     init(&ws);

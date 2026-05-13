@@ -95,13 +95,87 @@ fn index_one_page(workspace_root: &Path, args: &serde_json::Value) -> anyhow::Re
         .get("path")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow!("recall.request.index_page missing `path`"))?;
+    validate_workspace_relative(path_rel)?;
     let abs = workspace_root.join(path_rel);
+    let abs = canonicalize_inside(workspace_root, &abs)?;
     if !abs.is_file() {
         index::reindex_via_full_rebuild(workspace_root)?;
         return Ok(());
     }
     let bm25 = open_bm25(workspace_root)?;
     index::reindex_one_wiki_page(&abs, &bm25, path_rel)
+}
+
+/// Reject obviously-hostile payloads before touching the filesystem.
+///
+/// Forbids parent-segment escapes (`..`), absolute paths (leading `/`
+/// or Windows drive letters), and embedded NUL bytes that would split a
+/// `CString`. A path that survives this check still has to canonicalize
+/// inside the workspace root in [`canonicalize_inside`].
+fn validate_workspace_relative(path_rel: &str) -> anyhow::Result<()> {
+    if path_rel.is_empty() {
+        return Err(anyhow!("recall.request.index_page `path` is empty"));
+    }
+    if path_rel.contains('\0') {
+        return Err(anyhow!("recall.request.index_page `path` contains NUL byte"));
+    }
+    let pb = std::path::PathBuf::from(path_rel);
+    if pb.is_absolute() {
+        return Err(anyhow!("recall.request.index_page `path` must be workspace-relative"));
+    }
+    for component in pb.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return Err(anyhow!("recall.request.index_page `path` may not contain `..`"));
+        }
+    }
+    Ok(())
+}
+
+/// Canonicalize `candidate` and assert the result lives under
+/// `workspace_root` (also canonicalized).
+///
+/// `candidate` may not exist yet — in that case we canonicalize the
+/// nearest existing ancestor and re-attach the trailing components.
+fn canonicalize_inside(
+    workspace_root: &Path,
+    candidate: &Path,
+) -> anyhow::Result<std::path::PathBuf> {
+    let root_canon = workspace_root.canonicalize().with_context(|| {
+        format!("canonicalizing workspace root `{}`", workspace_root.display())
+    })?;
+    let candidate_canon = canonicalize_lenient(candidate)?;
+    if !candidate_canon.starts_with(&root_canon) {
+        return Err(anyhow!(
+            "recall.request.index_page path `{}` escapes workspace root `{}`",
+            candidate_canon.display(),
+            root_canon.display(),
+        ));
+    }
+    Ok(candidate_canon)
+}
+
+/// Canonicalize `path` even if it does not exist yet by canonicalizing
+/// the longest existing ancestor and re-appending the missing tail.
+fn canonicalize_lenient(path: &Path) -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(c) = path.canonicalize() {
+        return Ok(c);
+    }
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut cursor = path.to_path_buf();
+    while let Some(parent) = cursor.parent() {
+        if let Some(name) = cursor.file_name() {
+            tail.push(name.to_os_string());
+        }
+        if let Ok(parent_canon) = parent.canonicalize() {
+            let mut acc = parent_canon;
+            for segment in tail.iter().rev() {
+                acc.push(segment);
+            }
+            return Ok(acc);
+        }
+        cursor = parent.to_path_buf();
+    }
+    Err(anyhow!("could not canonicalize `{}` against any existing ancestor", path.display()))
 }
 
 fn open_bm25(workspace_root: &Path) -> anyhow::Result<Bm25Backend> {
